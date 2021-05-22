@@ -30,7 +30,8 @@
 
 -record(state, {
     socket :: any(), %ranch_transport:socket(),
-    transport
+    transport,
+    automatron_pid
 }).
 -type state() :: #state{}.
 
@@ -107,10 +108,10 @@ handle_info({tcp, _Port, <<>>}, State) ->
 handle_info({tcp, _Port, Packet}, State = {ok, #state{socket = Socket}}) ->
     Req = utils:open_envelope(Packet),
 
-    State = process_packet(Req, State, utils:unix_timestamp()),
+    NewState = process_packet(Req, State, utils:unix_timestamp()),
     ok = inet:setopts(Socket, [{active, once}]),
 
-    {noreply, State};
+    {noreply, NewState};
 handle_info({tcp_closed, _Port}, State) ->
     {stop, normal, State};
 handle_info(Message, State) ->
@@ -139,7 +140,7 @@ code_change(_OldVsn, State, _Extra) ->
 process_packet(undefined, State, _Now) ->
     _ = lager:notice("client sent invalid packet, ignoring ~p",[State]),
     State;
-process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport}}, _Now)
+process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, transport = Transport}}, _Now)
     when Type =:= create_session ->
     #req{
         create_session_data = #create_session {
@@ -147,6 +148,9 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
         }
     } = Req,
     _ = lager:info("create_session received from ~p", [UserName]),
+    
+    {ok, AutomatronPid} = automatron_fsm:start_link([self(), UserName]),
+    lager:info("automatron connected with Pid ~p", [AutomatronPid]),
 
     Response = #req{
         type = server_message,
@@ -156,5 +160,23 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
     },
     Data = utils:add_envelope(Response),
     Transport:send(Socket,Data),
-
+    % State.
+    {ok, #state{socket = Socket, transport = Transport, automatron_pid = AutomatronPid}}.
+process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport, automatron_pid=AutomatronPid}}, _Now)
+    when Type =:= user_request ->
+    #req{
+        user_request_data = #user_request {
+            message = Message
+        }
+    } = Req,
+    
+    Response = #req{
+        type = server_message,
+        server_message_data = #server_message {
+            message = gen_statem:call(AutomatronPid, {user_request, Message})
+        }
+    },
+    Data = utils:add_envelope(Response),
+    Transport:send(Socket,Data),
+    % State.
     State.
