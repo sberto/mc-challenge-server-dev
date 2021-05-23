@@ -170,6 +170,8 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
         }
     } = Req,
     
+    io:format("RICEVUTO: ~p", [Message]),
+
     Response = #req{
         type = server_message,
         server_message_data = #server_message {

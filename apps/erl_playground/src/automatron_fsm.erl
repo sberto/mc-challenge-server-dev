@@ -31,31 +31,36 @@ init([Data = #data{}]) ->
 callback_mode() ->
     state_functions.
 
-list_options({call, From}, {user_request, 0}, Data) ->
+list_options({call, From}, {user_request, <<"0">>}, Data) ->
     {keep_state, Data, {reply, From, welcome_msg()}};
-list_options({call, From}, {user_request, 1}, Data) ->
+list_options({call, From}, {user_request, <<"1">>}, Data) ->
     {keep_state, Data, {reply, From, get_joke()}};
-list_options({call, From}, {user_request, 2}, Data) ->
+list_options({call, From}, {user_request, <<"2">>}, Data) ->
     {keep_state, Data, {reply, From, Data#data.username}};
-list_options({call, From}, {user_request, 3}, Data=#data{timeout=Timeout}) ->
+list_options({call, From}, {user_request, <<"3">>}, Data=#data{timeout=Timeout}) ->
     {next_state, operator, Data, [{state_timeout, Timeout*1000, []}, {reply, From, operator_msg()}]};
 list_options(cast, _Msg, Data) ->
     send_msg("The message you entered is not recognized. Please try again."),
     {next_state, list_options, Data};
 list_options({call, From}, Msg, Data) ->
     send_msg("The message you entered is not recognized. Please try again."),
-    {keep_state, Data, {reply, From, Msg}}.
+    {keep_state, Data, {reply, From, <<"bad_msg">>}}.
+
 
 operator({call, From}, {user_request, _Msg}, Data=#data{msg_current=MsgCounter, msg_max=Max}) when MsgCounter == 0 -> 
     {next_state, list_options, Data#data{msg_current=Max}, {reply, From, timeout_msg()}};
-operator({call, From}, {user_request, N}, Data=#data{msg_current=MsgCounter}) when is_number(N) ->
-    Answer = if is_integer(N) andalso N rem 2 =:= 0 ->  even; 
-                true -> false
-            end,
+operator({call, From}, {user_request, Msg}, Data=#data{server_pid = ServerPid, msg_current=MsgCounter}) when is_binary(Msg) ->
+    Str = erlang:binary_to_list(Msg),
+    Answer = case string:to_integer(Str) of
+        {error,no_integer} -> 
+            list_to_binary(pid_to_list(ServerPid));
+        {N,_Rest} -> 
+            if N rem 2 =:= 0 ->  <<"even">>; 
+                        true -> <<"odd">>
+            end
+        end,
     {keep_state, Data#data{msg_current=MsgCounter-1}, {reply, From, Answer}};
-operator({call, From}, {user_request, _Msg}, Data=#data{server_pid=ServerPid, msg_current=MsgCounter}) -> 
-    Answer = ServerPid,
-    {keep_state, Data#data{msg_current=MsgCounter-1}, {reply, From, Answer}};
+
 operator(state_timeout, [], Data) ->
     Data#data.server_pid ! operator_timeout, %% TODO SERVER SIDE
     {next_state, list_options, Data}.
