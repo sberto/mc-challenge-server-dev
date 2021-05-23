@@ -88,6 +88,8 @@ init(Ref, Socket, Transport, [_ProxyProtocol]) ->
         transport = Transport
     }},
 
+    send_server_message(<<"--CONNECTION OK--~nPlease send a connection_request and user_messages">>, Transport, Socket),
+    
     gen_server:enter_loop(?MODULE, [], State).
 
 %% ------------------------------------------------------------------
@@ -99,14 +101,7 @@ init(Ref, Socket, Transport, [_ProxyProtocol]) ->
 init([]) -> {ok, undefined}.
 
 handle_cast({send, Msg}, State = {ok, #state{socket = Socket, transport = Transport}}) ->
-    ListMsg = #req{
-        type = server_message,
-        server_message_data = #server_message {
-            message = Msg
-        }
-    },
-    Data = utils:add_envelope(ListMsg),
-    Transport:send(Socket,Data),
+    send_server_message(Msg, Transport, Socket),
     {noreply, State};
 handle_cast(Message, State) ->
     _ = lager:notice("unknown handle_cast ~p", [Message]),
@@ -116,6 +111,8 @@ handle_info({tcp, _Port, <<>>}, State) ->
     _ = lager:notice("empty handle_info state: ~p", [State]),
     {noreply, State};
 handle_info({tcp, _Port, Packet}, State = {ok, #state{socket = Socket}}) ->
+    _ = lager:notice("packet: ~p", [Packet]),
+
     Req = utils:open_envelope(Packet),
 
     NewState = process_packet(Req, State, utils:unix_timestamp()),
@@ -164,15 +161,7 @@ process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, 
 
     Answer = gen_statem:call(AutomatronPid, {user_request, <<"0">>}),
 
-    Response = #req{
-        type = server_message,
-        server_message_data = #server_message {
-            message = Answer
-        }
-    },
-    Data = utils:add_envelope(Response),
-    Transport:send(Socket,Data),
-    % State.
+    send_server_message(Answer, Transport, Socket),
     {ok, #state{socket = Socket, transport = Transport, automatron_pid = AutomatronPid}};
 process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport, automatron_pid=AutomatronPid}}, _Now)
     when Type =:= user_request ->
@@ -183,13 +172,16 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
     } = Req,
     
     Answer = gen_statem:call(AutomatronPid, {user_request, Message}),
+    send_server_message(Answer, Transport, Socket),
+    State.
 
-    Response = #req{
+
+send_server_message(Msg, Transport, Socket) when is_binary(Msg) ->
+    Req = #req{
         type = server_message,
         server_message_data = #server_message {
-            message = Answer
+            message = Msg
         }
     },
-    Data = utils:add_envelope(Response),
-    Transport:send(Socket,Data),
-    State.
+    Data = utils:add_envelope(Req),
+    Transport:send(Socket,Data).
