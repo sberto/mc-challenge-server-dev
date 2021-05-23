@@ -75,17 +75,17 @@ get_joke() ->
     case Chosen of
         1 ->
             <<"Why did the golfer change his pants? Because he got a hole "
-            "in one!~n">>;
+            "in one!">>;
         2 ->
-            <<"What does a baby computer call his father? Data!~n">>;
+            <<"What does a baby computer call his father? Data!">>;
         3 ->
             <<"Why did the PowerPoint Presentation cross the road? A. To get "
-            "to the other slide~n">>;
+            "to the other slide">>;
         4 ->
             <<"What did the the drummer call his twin daughters? Anna one, "
-            "Anna two!~n">>;
+            "Anna two!">>;
         5 ->
-            <<"I would tell you a UDP joke, but you might not get it.~n">>
+            <<"I would tell you a UDP joke, but you might not get it.">>
     end.
 
 welcome_msg() ->
@@ -93,7 +93,7 @@ welcome_msg() ->
     "1 - Press 1 to receive the jokes of the day.~n"
     "2 - Press 2 to know your unique identifier for the call.~n"
     "3 - Press 3 to talk to an operator.~n"
-    "0 - Press 0 to listen to this message again.~n">>.
+    "0 - Press 0 to listen to this message again.">>.
 
 operator_msg() ->
     <<"I am the operator, how can I help you?">>.
