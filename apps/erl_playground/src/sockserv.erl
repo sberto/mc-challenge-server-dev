@@ -98,7 +98,7 @@ init(Ref, Socket, Transport, [_ProxyProtocol]) ->
 %% we can use the -behaviour(gen_server) attribute.
 init([]) -> {ok, undefined}.
 
-handle_cast({send, Msg}, State = {ok, #state{socket = Socket, transport = Transport, automatron_pid=AutomatronPid}}) ->
+handle_cast({send, Msg}, State = {ok, #state{socket = Socket, transport = Transport}}) ->
     ListMsg = #req{
         type = server_message,
         server_message_data = #server_message {

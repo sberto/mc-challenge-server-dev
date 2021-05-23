@@ -4,10 +4,10 @@
 
 -define(NAME, automatron).
 
--export([start/0, start_link/1]).
+-export([start_link/1]).
 -export([init/1, callback_mode/0, terminate/3]).
 -export([list_options/3, operator/3]). %% states
-% -export([call/1]). %% DEBUG API
+% -export([call/1, start/0]). %% DEBUG API
 
 -record(data, {server_pid, username, timeout :: integer(), msg_max :: integer(), msg_current :: integer()}).
 
