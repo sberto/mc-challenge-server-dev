@@ -161,7 +161,7 @@ process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, 
     Data = utils:add_envelope(Response),
     Transport:send(Socket,Data),
     % State.
-    {ok, #state{socket = Socket, transport = Transport, automatron_pid = AutomatronPid}}.
+    {ok, #state{socket = Socket, transport = Transport, automatron_pid = AutomatronPid}};
 process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport, automatron_pid=AutomatronPid}}, _Now)
     when Type =:= user_request ->
     #req{
@@ -173,10 +173,9 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
     Response = #req{
         type = server_message,
         server_message_data = #server_message {
-            message = gen_statem:call(AutomatronPid, {user_request, Message})
+            message = <<"USER REQ RECEIVED">> % gen_statem:call(AutomatronPid, {user_request, Message})
         }
     },
     Data = utils:add_envelope(Response),
     Transport:send(Socket,Data),
-    % State.
     State.

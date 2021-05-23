@@ -9,7 +9,7 @@
 
 -export([start_link/0]). -ignore_xref([{start_link, 4}]).
 -export([connect/0, disconnect/0]).
--export([send_create_session/0]).
+-export([send_create_session/0, send_user_request/1]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -58,6 +58,19 @@ send_create_session() ->
     },
     gen_server:cast(whereis(?SERVER), {create_session, CreateSession}).
 
+send_user_request(Num) when is_number(Num) ->
+    UserReq = #user_request {
+        message = list_to_binary(integer_to_list(Num))
+    },
+    gen_server:cast(whereis(?SERVER), {user_request, UserReq});
+send_user_request(Str) when is_list(Str) ->
+    UserReq = #user_request {
+        message = list_to_binary(Str)
+    },
+    gen_server:cast(whereis(?SERVER), {user_request, UserReq});
+send_user_request(_) ->
+    bad_argument.
+
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
@@ -73,6 +86,17 @@ handle_cast({create_session, CreateSession}, #state{socket = Socket} = State)
     Req = #req {
         type = create_session,
         create_session_data = CreateSession
+    },
+    Data = utils:add_envelope(Req),
+
+    gen_tcp:send(Socket, Data),
+
+    {noreply, State};
+handle_cast({user_request, Msg}, #state{socket = Socket} = State)
+    when Socket =/= undefined ->
+    Req = #req {
+        type = user_request,
+        user_request_data = Msg
     },
     Data = utils:add_envelope(Req),
 

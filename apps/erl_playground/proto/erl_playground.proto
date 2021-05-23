@@ -6,14 +6,20 @@ message server_message {
     required string message = 1;
 }
 
+message user_request {
+    required string message = 1;
+}
+
 message req {
     enum type_enum {
         create_session = 1;
         server_message = 2;
+        user_request = 3;
     }
     required type_enum type = 1;
     optional create_session create_session_data = 2;
     optional server_message server_message_data = 3;
+    optional user_request user_request_data = 4;
 }
 
 message envelope {
