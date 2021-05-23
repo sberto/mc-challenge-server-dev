@@ -25,7 +25,6 @@ start_link([ServerPid, UserId, TimeoutSecs, MsgMax]) ->
 
 init([Data = #data{}]) ->
     gen_statem:cast(?NAME, {user_request, 0}), %% ask for full list
-    send_msg(welcome_msg()),
     {ok, list_options, Data}.
 
 callback_mode() ->
@@ -40,10 +39,10 @@ list_options({call, From}, {user_request, <<"2">>}, Data) ->
 list_options({call, From}, {user_request, <<"3">>}, Data=#data{timeout=Timeout}) ->
     {next_state, operator, Data, [{state_timeout, Timeout*1000, []}, {reply, From, operator_msg()}]};
 list_options(cast, _Msg, Data) ->
-    send_msg("The message you entered is not recognized. Please try again."),
+    lager:info("automatron received a cast message."),
     {next_state, list_options, Data};
 list_options({call, From}, Msg, Data) ->
-    send_msg("The message you entered is not recognized. Please try again."),
+    lager:info("automatron could not recognize the call with message ~p", [Msg]),
     {keep_state, Data, {reply, From, <<"bad_msg">>}}.
 
 
@@ -101,11 +100,3 @@ operator_msg() ->
 
 timeout_msg() ->
     "Your time with the operator has finished. Goodbye!".
-
-send_msg(Msg) ->
-    send_msg(Msg, []).
-
-send_msg(Msg, Args) ->
-    io:format(Msg, Args).
-
- 

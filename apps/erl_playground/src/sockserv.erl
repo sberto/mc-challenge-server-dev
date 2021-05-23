@@ -152,10 +152,12 @@ process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, 
     {ok, AutomatronPid} = automatron_fsm:start_link([self(), UserName]),
     lager:info("automatron connected with Pid ~p", [AutomatronPid]),
 
+    Answer = gen_statem:call(AutomatronPid, {user_request, <<"0">>}),
+
     Response = #req{
         type = server_message,
         server_message_data = #server_message {
-            message = <<"OK">>
+            message = Answer
         }
     },
     Data = utils:add_envelope(Response),
