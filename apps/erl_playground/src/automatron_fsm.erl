@@ -5,7 +5,7 @@
 -define(NAME, automatron).
 
 -export([start_link/1]).
--export([init/1, callback_mode/0, terminate/3]).
+-export([init/1, callback_mode/0, terminate/3, code_change/4]).
 -export([list_options/3, operator/3]). %% states
 % -export([call/1, start/0]). %% DEBUG API
 
@@ -63,10 +63,12 @@ operator({call, From}, {user_request, Msg}, Data=#data{server_pid = ServerPid, m
 operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
     gen_statem:cast(ServerPid, {send, timeout_msg()}),
     {next_state, list_options, Data}.
-
     
 terminate(_Reason, _State, _Data) ->
     ok.
+
+code_change(_Vsn, State, Data, _Extra) ->
+    {ok, State, Data}.
 
 %% Private
 
