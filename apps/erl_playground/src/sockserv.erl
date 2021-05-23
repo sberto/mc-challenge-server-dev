@@ -98,6 +98,16 @@ init(Ref, Socket, Transport, [_ProxyProtocol]) ->
 %% we can use the -behaviour(gen_server) attribute.
 init([]) -> {ok, undefined}.
 
+handle_cast({send, Msg}, State = {ok, #state{socket = Socket, transport = Transport, automatron_pid=AutomatronPid}}) ->
+    ListMsg = #req{
+        type = server_message,
+        server_message_data = #server_message {
+            message = Msg
+        }
+    },
+    Data = utils:add_envelope(ListMsg),
+    Transport:send(Socket,Data),
+    {noreply, State};
 handle_cast(Message, State) ->
     _ = lager:notice("unknown handle_cast ~p", [Message]),
     {noreply, State}.

@@ -60,8 +60,8 @@ operator({call, From}, {user_request, Msg}, Data=#data{server_pid = ServerPid, m
         end,
     {keep_state, Data#data{msg_current=MsgCounter-1}, {reply, From, Answer}};
 
-operator(state_timeout, [], Data) ->
-    Data#data.server_pid ! operator_timeout, %% TODO SERVER SIDE
+operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
+    gen_statem:cast(ServerPid, {send, timeout_msg()}),
     {next_state, list_options, Data}.
 
     
@@ -74,29 +74,30 @@ get_joke() ->
     Chosen = rand:uniform(5),
     case Chosen of
         1 ->
-            "Why did the golfer change his pants? Because he got a hole "
-            "in one!~n";
+            <<"Why did the golfer change his pants? Because he got a hole "
+            "in one!~n">>;
         2 ->
-            "What does a baby computer call his father? Data!~n";
+            <<"What does a baby computer call his father? Data!~n">>;
         3 ->
-            "Why did the PowerPoint Presentation cross the road? A. To get "
-            "to the other slide~n";
+            <<"Why did the PowerPoint Presentation cross the road? A. To get "
+            "to the other slide~n">>;
         4 ->
-            "What did the the drummer call his twin daughters? Anna one, "
-            "Anna two!~n";
+            <<"What did the the drummer call his twin daughters? Anna one, "
+            "Anna two!~n">>;
         5 ->
-            "I would tell you a UDP joke, but you might not get it.~n"
+            <<"I would tell you a UDP joke, but you might not get it.~n">>
     end.
 
 welcome_msg() ->
-    "WELCOME TO AUTOMATRON CALL CENTER~n"
+    <<"WELCOME TO AUTOMATRON CALL CENTER~n"
     "1 - Press 1 to receive the jokes of the day.~n"
     "2 - Press 2 to know your unique identifier for the call.~n"
     "3 - Press 3 to talk to an operator.~n"
-    "0 - Press 0 to listen to this message again.~n".
+    "0 - Press 0 to listen to this message again.~n">>.
 
 operator_msg() ->
-    "I am the operator, how can I help you?".
+    <<"I am the operator, how can I help you?">>.
 
 timeout_msg() ->
-    "Your time with the operator has finished. Goodbye!".
+    Msg = "Your time with the operator has finished. Goodbye!~n"++binary:bin_to_list(welcome_msg()),
+    erlang:list_to_binary(Msg).
