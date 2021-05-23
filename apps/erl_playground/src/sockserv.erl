@@ -88,8 +88,6 @@ init(Ref, Socket, Transport, [_ProxyProtocol]) ->
         transport = Transport
     }},
 
-    send_server_message(<<"--CONNECTION OK--~nPlease send a connection_request and user_messages">>, Transport, Socket),
-    
     gen_server:enter_loop(?MODULE, [], State).
 
 %% ------------------------------------------------------------------
@@ -111,8 +109,6 @@ handle_info({tcp, _Port, <<>>}, State) ->
     _ = lager:notice("empty handle_info state: ~p", [State]),
     {noreply, State};
 handle_info({tcp, _Port, Packet}, State = {ok, #state{socket = Socket}}) ->
-    _ = lager:notice("packet: ~p", [Packet]),
-
     Req = utils:open_envelope(Packet),
 
     NewState = process_packet(Req, State, utils:unix_timestamp()),
