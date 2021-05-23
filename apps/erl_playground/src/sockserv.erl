@@ -170,12 +170,12 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
         }
     } = Req,
     
-    io:format("RICEVUTO: ~p", [Message]),
+    Answer = gen_statem:call(AutomatronPid, {user_request, Message}),
 
     Response = #req{
         type = server_message,
         server_message_data = #server_message {
-            message = <<"USER REQ RECEIVED">> % gen_statem:call(AutomatronPid, {user_request, Message})
+            message = Answer
         }
     },
     Data = utils:add_envelope(Response),
