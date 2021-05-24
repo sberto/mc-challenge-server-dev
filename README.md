@@ -29,14 +29,36 @@ This is a playgrounf application that allows you to focus on the logic of your s
 
 # Candidate comments
 ## Messages
-A new proto message has been implemented (user_request), to send input to the automatron_fsm.
+A new proto message has been implemented (`user_request`), to send input to the `automatron_fsm`.
 ## Client
 You can connect to the server performing:
-```sockclient:connect().```
-```sockclient:send_create_session().```
+
+```bash
+rebar shell
+```
+
+and
+
+```erlang
+> sockclient:connect().```
+> sockclient:send_create_session().
+```
+
 After this you can perform user interactions with
-```sockclient:send_user_request(Input).```
+
+```erlang
+> sockclient:send_user_request(Input).
+```
 
 ## Tests
 Run tests with
-```ct:run_test([{spec, "spec.spec"}]).```
+
+```bash
+rebar shell
+```
+
+and
+
+```erlang
+> ct:run_test([{spec, "spec.spec"}]).
+```
