@@ -31,6 +31,7 @@ This is a playgrounf application that allows you to focus on the logic of your s
 ## Messages
 A new proto message has been implemented (`user_request`), to send input to the `automatron_fsm`.
 ## Client
+### Integrated client
 You can connect to the server performing:
 
 ```bash
@@ -49,6 +50,9 @@ After this you can perform user interactions with
 ```erlang
 > sockclient:send_user_request(Input).
 ```
+
+### Optional client in Python
+You can find the code [here](https://sberto@github.com/sberto/mc-challenge-client.git).
 
 ## Tests
 Run tests with
