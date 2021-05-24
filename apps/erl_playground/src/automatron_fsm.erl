@@ -7,16 +7,8 @@
 -export([start_link/1]).
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
 -export([list_options/3, operator/3]). %% states
-% -export([call/1, start/0]). %% DEBUG API
 
 -record(data, {server_pid, username, timeout :: integer(), msg_max :: integer(), msg_current :: integer()}).
-
-% %% DEBUG API %%
-% call(Msg) ->
-%     gen_statem:call(?NAME, {user_request, Msg}).
-
-% start() ->
-%     start_link([self(), unnamed_user]).
 
 start_link([ServerPid, UserId, Socket]) ->
     start_link([ServerPid, UserId, Socket, 10, 3]);
