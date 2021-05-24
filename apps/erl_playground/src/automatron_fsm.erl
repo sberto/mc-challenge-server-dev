@@ -18,13 +18,13 @@
 % start() ->
 %     start_link([self(), unnamed_user]).
 
-start_link([ServerPid, UserId]) ->
-    start_link([ServerPid, UserId, 10, 3]);
-start_link([ServerPid, UserId, TimeoutSecs, MsgMax]) ->
-    gen_statem:start_link({local, ?NAME}, ?MODULE, [#data{server_pid = ServerPid, username = UserId, timeout=TimeoutSecs, msg_max=MsgMax, msg_current=MsgMax}], []).
+start_link([ServerPid, UserId, Socket]) ->
+    start_link([ServerPid, UserId, Socket, 10, 3]);
+start_link([ServerPid, UserId, Socket, TimeoutSecs, MsgMax]) ->
+    Name = list_to_atom(port_to_list(Socket)),
+    gen_statem:start_link({local, Name}, ?MODULE, [#data{server_pid = ServerPid, username = Name, timeout=TimeoutSecs, msg_max=MsgMax, msg_current=MsgMax}], []).
 
 init([Data = #data{}]) ->
-    gen_statem:cast(?NAME, {user_request, 0}), %% ask for full list
     {ok, list_options, Data}.
 
 callback_mode() ->
@@ -35,7 +35,7 @@ list_options({call, From}, {user_request, <<"0">>}, Data) ->
 list_options({call, From}, {user_request, <<"1">>}, Data) ->
     {keep_state, Data, {reply, From, get_joke()}};
 list_options({call, From}, {user_request, <<"2">>}, Data) ->
-    {keep_state, Data, {reply, From, Data#data.username}};
+    {keep_state, Data, {reply, From, atom_to_binary(Data#data.username)}};
 list_options({call, From}, {user_request, <<"3">>}, Data=#data{timeout=Timeout}) ->
     {next_state, operator, Data, [{state_timeout, Timeout*1000, []}, {reply, From, operator_msg()}]};
 list_options(cast, _Msg, Data) ->

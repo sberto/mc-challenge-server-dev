@@ -152,7 +152,7 @@ process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, 
     } = Req,
     _ = lager:info("create_session received from ~p", [UserName]),
     
-    {ok, AutomatronPid} = automatron_fsm:start_link([self(), UserName]),
+    {ok, AutomatronPid} = automatron_fsm:start_link([self(), UserName, Socket]),
     lager:info("automatron connected with Pid ~p", [AutomatronPid]),
 
     Answer = gen_statem:call(AutomatronPid, {user_request, <<"0">>}),
@@ -168,7 +168,6 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
     } = Req,
     
     [AutomatronPid] = orddict:fetch(Socket, Pids),
-    io:format("pids: ~p~npid: ~p",[Pids, AutomatronPid]),
     Answer = gen_statem:call(AutomatronPid, {user_request, Message}),
     send_server_message(Answer, Transport, Socket),
     State.
