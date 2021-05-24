@@ -31,7 +31,7 @@
 -record(state, {
     socket :: any(), %ranch_transport:socket(),
     transport,
-    automatron_pids = orddict:new() :: [{any(),pid()}]
+    automatron_pid :: pid()
 }).
 -type state() :: #state{}.
 
@@ -143,7 +143,7 @@ code_change(_OldVsn, State, _Extra) ->
 process_packet(undefined, State, _Now) ->
     _ = lager:notice("client sent invalid packet, ignoring ~p",[State]),
     State;
-process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, transport = Transport, automatron_pids = OldPids}}, _Now)
+process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, transport = Transport, automatron_pid = OldPids}}, _Now)
     when Type =:= create_session ->
     #req{
         create_session_data = #create_session {
@@ -158,8 +158,8 @@ process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, 
     Answer = gen_statem:call(AutomatronPid, {user_request, <<"0">>}),
 
     send_server_message(Answer, Transport, Socket),
-    {ok, #state{socket = Socket, transport = Transport, automatron_pids = orddict:append(Socket, AutomatronPid, OldPids)}};
-process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport, automatron_pids=Pids}}, _Now)
+    {ok, #state{socket = Socket, transport = Transport, automatron_pid = AutomatronPid}};
+process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport, automatron_pid=AutomatronPid}}, _Now)
     when Type =:= user_request ->
     #req{
         user_request_data = #user_request {
@@ -167,7 +167,6 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
         }
     } = Req,
     
-    [AutomatronPid] = orddict:fetch(Socket, Pids),
     Answer = gen_statem:call(AutomatronPid, {user_request, Message}),
     send_server_message(Answer, Transport, Socket),
     State.
