@@ -147,9 +147,10 @@ process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, 
     when Type =:= create_session ->
     #req{
         create_session_data = #create_session {
-            username = UserName
+            username = UserNameBin
         }
     } = Req,
+    UserName = binary_to_list(UserNameBin),
     _ = lager:info("create_session received from ~p", [UserName]),
     
     {ok, AutomatronPid} = automatron_fsm:start_link([self(), UserName, Socket]),

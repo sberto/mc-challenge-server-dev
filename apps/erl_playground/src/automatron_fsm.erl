@@ -8,13 +8,13 @@
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
 -export([list_options/3, operator/3]). %% states
 
--record(data, {server_pid, username, timeout :: integer(), msg_max :: integer(), msg_current :: integer()}).
+-record(data, {server_pid, username, unique :: atom(), timeout :: integer(), msg_max :: integer(), msg_current :: integer()}).
 
 start_link([ServerPid, UserId, Socket]) ->
     start_link([ServerPid, UserId, Socket, 10, 3]);
 start_link([ServerPid, UserId, Socket, TimeoutSecs, MsgMax]) ->
     Name = list_to_atom(port_to_list(Socket)),
-    gen_statem:start_link({local, Name}, ?MODULE, [#data{server_pid = ServerPid, username = Name, timeout=TimeoutSecs, msg_max=MsgMax, msg_current=MsgMax}], []).
+    gen_statem:start_link({local, Name}, ?MODULE, [#data{server_pid = ServerPid, username = UserId, unique=Name, timeout=TimeoutSecs, msg_max=MsgMax, msg_current=MsgMax}], []).
 
 init([Data = #data{}]) ->
     {ok, list_options, Data}.
@@ -23,11 +23,11 @@ callback_mode() ->
     state_functions.
 
 list_options({call, From}, {user_request, <<"0">>}, Data) ->
-    {keep_state, Data, {reply, From, welcome_msg()}};
+    {keep_state, Data, {reply, From, welcome_msg(Data#data.username)}};
 list_options({call, From}, {user_request, <<"1">>}, Data) ->
     {keep_state, Data, {reply, From, get_joke()}};
 list_options({call, From}, {user_request, <<"2">>}, Data) ->
-    {keep_state, Data, {reply, From, atom_to_binary(Data#data.username)}};
+    {keep_state, Data, {reply, From, atom_to_binary(Data#data.unique)}};
 list_options({call, From}, {user_request, <<"3">>}, Data=#data{timeout=Timeout}) ->
     {next_state, operator, Data, [{state_timeout, Timeout*1000, []}, {reply, From, operator_msg()}]};
 list_options(cast, _Msg, Data) ->
@@ -39,7 +39,7 @@ list_options({call, From}, Msg, Data) ->
 
 
 operator({call, From}, {user_request, _Msg}, Data=#data{msg_current=MsgCounter, msg_max=Max}) when MsgCounter == 0 -> 
-    {next_state, list_options, Data#data{msg_current=Max}, {reply, From, timeout_msg()}};
+    {next_state, list_options, Data#data{msg_current=Max}, {reply, From, timeout_msg(Data#data.username)}};
 operator({call, From}, {user_request, Msg}, Data=#data{server_pid = ServerPid, msg_current=MsgCounter}) when is_binary(Msg) ->
     Str = erlang:binary_to_list(Msg),
     Answer = case string:to_integer(Str) of
@@ -53,7 +53,7 @@ operator({call, From}, {user_request, Msg}, Data=#data{server_pid = ServerPid, m
     {keep_state, Data#data{msg_current=MsgCounter-1}, {reply, From, Answer}};
 
 operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
-    gen_statem:cast(ServerPid, {send, timeout_msg()}),
+    gen_statem:cast(ServerPid, {send, timeout_msg(Data#data.username)}),
     {next_state, list_options, Data}.
     
 terminate(_Reason, _State, _Data) ->
@@ -82,16 +82,18 @@ get_joke() ->
             <<"I would tell you a UDP joke, but you might not get it.">>
     end.
 
-welcome_msg() ->
-    <<"WELCOME TO AUTOMATRON CALL CENTER~n"
+-spec welcome_msg(User :: list()) -> binary().
+welcome_msg(User) when is_list(User)->
+    List = "WELCOME "++User++" TO AUTOMATRON CALL CENTER~n"
     "1 - Press 1 to receive the jokes of the day.~n"
     "2 - Press 2 to know your unique identifier for the call.~n"
     "3 - Press 3 to talk to an operator.~n"
-    "0 - Press 0 to listen to this message again.">>.
+    "0 - Press 0 to listen to this message again.",
+    list_to_binary(List).
 
 operator_msg() ->
     <<"I am the operator, how can I help you?">>.
 
-timeout_msg() ->
-    Msg = "Your time with the operator has finished. Goodbye!~n"++binary:bin_to_list(welcome_msg()),
+timeout_msg(User) when is_list(User)->
+    Msg = "Your time with the operator has finished. Goodbye, "++User++"!~n"++binary:bin_to_list(welcome_msg(User)),
     erlang:list_to_binary(Msg).
