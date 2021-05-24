@@ -1,30 +1,35 @@
 -module(sockserv_SUITE).
 -include_lib("common_test/include/ct.hrl").
--export([all/0, groups/0, init_per_group/2, end_per_group/2]).
--export([client_a/1, client_b/1]).
+-export([all/0, groups/0, init_per_group/2, end_per_group/2, init_per_testcase/2, end_per_testcase/2]).
+-export([client_only_access/1, client/1, client_random_name/1]).
 
-all() -> [{group, session}].
+all() -> [{group, multiple_access_one_username}].
 
-groups() -> [{session,
-              [],
-              [{group, clients}]},
-             {clients,
-              [parallel, {repeat, 3}],
-              [client_a, client_b]}].
+groups() -> [{multiple_access_one_username,
+              [{repeat, 10}],
+              [client_only_access]}].
 
-init_per_group(session, Config) ->
-    % sockserv:start(),
-    Config;
 init_per_group(_, Config) ->
     Config.
 
 end_per_group(_, _Config) ->
     ok.
 
-client_a(_Config) ->
-    sockclient:connect(),
-    sockclient:send_create_session("User").
+init_per_testcase(_, Config) ->
+    ok = sockclient:connect(),
+    Config.
 
-client_b(_Config) ->
-    sockclient:connect(),
-    sockclient:send_create_session("User").
+end_per_testcase(client_only_access, Config) ->
+    Config;
+end_per_testcase(_, Config) ->
+    ok = sockclient:disconnect(),
+    Config.
+
+client_only_access(_Config) ->
+    ok = sockclient:send_create_session("User").
+
+client(_Config) ->
+    ok = sockclient:send_create_session("User").
+
+client_random_name(_Config) ->
+    ok = sockclient:send_create_session(ref_to_list(make_ref())).
