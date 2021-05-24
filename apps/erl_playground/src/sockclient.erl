@@ -9,7 +9,7 @@
 
 -export([start_link/0]). -ignore_xref([{start_link, 4}]).
 -export([connect/0, disconnect/0]).
--export([send_create_session/0, send_user_request/1]).
+-export([send_create_session/0, send_create_session/1, send_user_request/1]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -55,6 +55,12 @@ disconnect() ->
 send_create_session() ->
     CreateSession = #create_session {
         username = <<"TestUser">>
+    },
+    gen_server:cast(whereis(?SERVER), {create_session, CreateSession}).
+send_create_session(UsernameList) when is_list(UsernameList) ->
+    Username = list_to_binary(UsernameList),
+    CreateSession = #create_session {
+        username = Username
     },
     gen_server:cast(whereis(?SERVER), {create_session, CreateSession}).
 
