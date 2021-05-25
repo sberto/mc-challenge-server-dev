@@ -162,22 +162,22 @@ idle_wait(_, Event, Data) ->
 
 chat(cast, {accept_chat, OtherPid}, Data = #data{other_user = OtherPid}) ->
     {keep_state, Data};
-chat(cast, {user_request, Msg = <<"bye">>}, Data) ->
+chat(cast, {tell_other_user, Msg = <<"bye">>}, Data) ->
     notice("Ricevuto messaggio \"~p\"~n", [Msg]),
     notice_change(list_options),
     {next_state, list_options, Data};
-chat(cast, {tell_user, Msg}, Data=#data{server_pid = ServerPid}) when is_binary(Msg) ->
+chat(cast, {tell_other_user, Msg}, Data=#data{server_pid = ServerPid}) when is_binary(Msg) ->
     tell_user(ServerPid, Msg),
     {keep_state, Data};
 chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user=OtherPid}) ->
     set_available(self()),
     notice("Invio messaggio \"~p\"~n", [Msg]),
-    gen_statem:cast(OtherPid, {tell_user, Msg}),
+    gen_statem:cast(OtherPid, {tell_other_user, Msg}),
     notice_change(list_options),
     {next_state, list_options, Data, {reply, From, silent}}; 
 chat({call, From}, {user_request, Msg}, Data = #data{other_user=OtherPid}) ->
     notice("Invio messaggio \"~p\" a ~p~n", [Msg, OtherPid]),
-    gen_statem:cast(OtherPid, {tell_user, Msg}),
+    gen_statem:cast(OtherPid, {tell_other_user, Msg}),
     {keep_state, Data, {reply, From, silent}};
 chat(Event, _Msg, Data) ->
     unexpected(Event, chat),
