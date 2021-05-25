@@ -99,7 +99,10 @@ list_options(cast, _Msg, Data) ->
         {next_state, list_options, Data};
 list_options({call, From}, Msg, Data) ->
     lager:info("automatron could not recognize the call with message ~p", [Msg]),
-    {keep_state, Data, {reply, From, <<"bad_msg">>}}.
+    {keep_state, Data, {reply, From, <<"bad_msg">>}};
+list_options(_, Event, Data) ->
+    unexpected(Event, idle),
+    {keep_state, Data}.
 
 idle(cast, {ask_chat, OtherPid}, D = #data{timeout = Timeout}) ->
     Ref = monitor(process, OtherPid),
@@ -122,9 +125,12 @@ idle(cast, Event, Data) ->
 idle({call, From}, _Msg, Data) ->
     {keep_state, Data, {reply, From, waiting_for_chat_msg()}};
 idle(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
-        set_not_available(self()),
-        tell_user(ServerPid, waiting_timeout_msg(Data#data.username)),
-        {next_state, list_options, Data}.
+    set_not_available(self()),
+    tell_user(ServerPid, waiting_timeout_msg(Data#data.username)),
+    {next_state, list_options, Data};
+idle(_, Event, Data) ->
+    unexpected(Event, idle),
+    {keep_state, Data}.
     
 
 %% idle_wait allows to expect replies from the other side and start chat 
@@ -145,7 +151,11 @@ idle_wait({call, _From}, Event, Data) ->
 idle_wait(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
     set_not_available(self()),
     tell_user(ServerPid, waiting_timeout_msg(Data#data.username)),
-    {next_state, list_options, Data}.
+    {next_state, list_options, Data};
+idle_wait(_, Event, Data) ->
+    unexpected(Event, idle_wait),
+    {keep_state, Data}.
+
 
 
 
@@ -156,20 +166,23 @@ chat(cast, {user_request, Msg = <<"bye">>}, Data) ->
     notice("Ricevuto messaggio \"~p\"~n", [Msg]),
     notice_change(list_options),
     {next_state, list_options, Data};
-chat(cast, {user_request, Msg}, Data) ->
-    notice("Ricevuto messaggio \"~p\"~n", [Msg]),
+chat(cast, {tell_user, Msg}, Data=#data{server_pid = ServerPid}) when is_binary(Msg) ->
+    tell_user(ServerPid, Msg),
     {keep_state, Data};
 chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user=OtherPid}) ->
     set_available(self()),
     notice("Invio messaggio \"~p\"~n", [Msg]),
-    gen_statem:cast(OtherPid, {user_request, Msg}),
+    gen_statem:cast(OtherPid, {tell_user, Msg}),
     notice_change(list_options),
-    {next_state, list_options, Data, {reply, From, ok}}; 
+    {next_state, list_options, Data, {reply, From, silent}}; 
 chat({call, From}, {user_request, Msg}, Data = #data{other_user=OtherPid}) ->
-    notice("Invio messaggio \"~p\"~n", [Msg]),
-    gen_statem:cast(OtherPid, {user_request, Msg}),
-    {keep_state, Data, {reply, From, ok}};
+    notice("Invio messaggio \"~p\" a ~p~n", [Msg, OtherPid]),
+    gen_statem:cast(OtherPid, {tell_user, Msg}),
+    {keep_state, Data, {reply, From, silent}};
 chat(Event, _Msg, Data) ->
+    unexpected(Event, chat),
+    {keep_state, Data};
+chat(_, Event, Data) ->
     unexpected(Event, chat),
     {keep_state, Data}.
     
@@ -204,7 +217,10 @@ operator({call, From}, {user_request, Msg}, Data = #data{server_pid = ServerPid,
     {keep_state, Data#data{msg_current = MsgCounter - 1}, {reply, From, Answer}};
 operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
     tell_user(ServerPid, operator_timeout_msg(Data#data.username)),
-    {next_state, list_options, Data}.
+    {next_state, list_options, Data};
+operator(_, Event, Data) ->
+    unexpected(Event, operator),
+    {keep_state, Data}.
 
 %%%%%%%%%%%%%%
 %% Messages %%

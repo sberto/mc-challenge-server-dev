@@ -181,4 +181,8 @@ send_server_message(Msg, Transport, Socket) when is_binary(Msg) ->
         }
     },
     Data = utils:add_envelope(Req),
-    Transport:send(Socket,Data).
+    Transport:send(Socket,Data);
+send_server_message(silent, _Transport, _Socket) ->
+        ok;
+send_server_message(Msg, _Transport, _Socket) ->
+    lager:info("[WARN] received ~p in send_server_message", [Msg]).
