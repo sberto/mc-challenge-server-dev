@@ -8,7 +8,7 @@
 
 -export([start_link/1]).
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
--export([list_options/3, operator/3, waiting_for_chat/3, chat/3]). %% states
+-export([list_options/3, operator/3, idle/3, idle_wait/3, chat/3]). %% states
 
 -record(data,
         {server_pid,
@@ -17,7 +17,12 @@
          timeout :: integer(),
          msg_max :: integer(),
          msg_current :: integer(),
-         other_user :: pid()}).
+         other_user :: pid(),
+         monitor :: reference()}).
+
+%%%%%%%%%%%%%%%%
+%% Server API %%
+%%%%%%%%%%%%%%%%
 
 start_link([ServerPid, UserId, Socket]) ->
     start_link([ServerPid, UserId, Socket, 10, 3]);
@@ -33,12 +38,40 @@ start_link([ServerPid, UserId, Socket, TimeoutSecs, MsgMax]) ->
                                  msg_current = MsgMax}],
                           []).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Client-Client API   %%
+%% All calls are async %%
+%% to avoid deadlocks  %%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Ask the other statem for chat session
+ask_chat(OtherPid, OwnPid) ->
+    gen_statem:cast(OtherPid, {ask_chat, OwnPid}).
+
+%% Forward the client message accepting the transaction
+accept_chat(OtherPid, OwnPid) ->
+    gen_statem:cast(OtherPid, {accept_chat, OwnPid}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%% gen_statem required %%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
 init([Data = #data{}]) ->
-    ?SET_NOT_AVAILABLE(self()),
+    set_not_available(self()),
     {ok, list_options, Data}.
 
 callback_mode() ->
     state_functions.
+
+terminate(_Reason, _State, _Data) ->
+    ok.
+
+code_change(_Vsn, State, Data, _Extra) ->
+    {ok, State, Data}.
+
+%%%%%%%%%%%%
+%% States %%
+%%%%%%%%%%%%
 
 list_options({call, From}, {user_request, <<"0">>}, Data) ->
     {keep_state, Data, {reply, From, welcome_msg(Data#data.username)}};
@@ -52,51 +85,110 @@ list_options({call, From}, {user_request, <<"3">>}, Data = #data{timeout = Timeo
      Data,
      [{state_timeout, Timeout * 1000, []}, {reply, From, operator_msg()}]};
 list_options({call, From}, {user_request, <<"4">>}, Data = #data{timeout = Timeout}) ->
-    ?SET_AVAILABLE(self()),
+    notice_change(idle),
+    set_available(self()),
+    check_presence_other_users(),
     {next_state,
-     waiting_for_chat,
+     idle,
      Data,
-     [{state_timeout, Timeout * 1000, []}, {reply, From,  waiting_for_chat_msg()}]};
+     [{state_timeout, Timeout * 10 * 1000, []}, {reply, From,  waiting_for_chat_msg()}]};
+list_options(cast, check_presence_other_users, Data) ->
+    {keep_state, Data, [postpone]};
 list_options(cast, _Msg, Data) ->
-    lager:info("automatron received a cast message."),
-    {next_state, list_options, Data};
+        lager:info("automatron received a cast message."),
+        {next_state, list_options, Data};
 list_options({call, From}, Msg, Data) ->
     lager:info("automatron could not recognize the call with message ~p", [Msg]),
     {keep_state, Data, {reply, From, <<"bad_msg">>}}.
 
-waiting_for_chat({call, From}, connect, Data) ->
+idle(cast, {ask_chat, OtherPid}, D = #data{timeout = Timeout}) ->
+    Ref = monitor(process, OtherPid),
+    notice_change(idle_wait),
+    accept_chat(OtherPid, self()),
+    {next_state, idle_wait, D#data{other_user = OtherPid, monitor = Ref}, [{state_timeout, Timeout * 1000, []}]};
+idle(cast, check_presence_other_users, Data = #data{timeout = Timeout}) ->
     case pick_user() of
-        false -> {keep_state, Data, {reply, From, <<"Please wait.">>}};
-        UserPid -> % TODO ack
-            ?SET_NOT_AVAILABLE(self()),
-            NewData = Data#data{other_user = UserPid},
-            {next_state, chat, NewData, {reply, From,  chat_msg(UserPid)}}
+        [] -> {keep_state, Data};
+        OtherPid -> 
+            set_not_available(self()),
+            ask_chat(OtherPid, self()),
+            notice("asking user ~p to chat~n", [OtherPid]),
+            Ref = monitor(process, OtherPid),
+            {next_state, idle_wait, Data#data{other_user = OtherPid, monitor = Ref}, [{state_timeout, Timeout * 1000, []}]}
     end;
-waiting_for_chat({call, From}, _Msg, Data) ->
+idle(cast, Event, Data) ->
+    unexpected(Event, idle),
+    {keep_state, Data};
+idle({call, From}, _Msg, Data) ->
     {keep_state, Data, {reply, From, waiting_for_chat_msg()}};
-waiting_for_chat(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
-        ?SET_NOT_AVAILABLE(self()),
-        gen_statem:cast(ServerPid, {send, waiting_timeout_msg(Data#data.username)}),
+idle(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
+        set_not_available(self()),
+        tell_user(ServerPid, waiting_timeout_msg(Data#data.username)),
         {next_state, list_options, Data}.
     
-chat({call, From}, {user_request, <<"bye">>}, Data) ->
-    ?SET_AVAILABLE(self()),
-    {keep_state, Data, {next_state, list_options, Data}};
-chat({call, From}, {user_request, Msg}, Data) ->
-    {keep_state, Data, {reply, From, Msg}}.
+
+%% idle_wait allows to expect replies from the other side and start chat 
+idle_wait(cast, {ask_chat, OtherPid}, D = #data{other_user = OtherPid}) ->
+    accept_chat(OtherPid, self()),
+    notice_change(chat),
+    {next_state, chat, D};
+idle_wait(cast, {accept_chat, OtherPid}, D = #data{other_user = OtherPid}) ->
+    accept_chat(OtherPid, self()),
+    notice_change(chat),
+    {next_state, chat, D};
+idle_wait(cast, Event, Data) ->
+    unexpected(Event, idle_wait),
+    {keep_state, Data};
+idle_wait({call, _From}, Event, Data) ->
+    unexpected(Event, idle_wait),
+    {keep_state, Data};
+idle_wait(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
+    set_not_available(self()),
+    tell_user(ServerPid, waiting_timeout_msg(Data#data.username)),
+    {next_state, list_options, Data}.
+
+
+
+
+chat(cast, {accept_chat, OtherPid}, Data = #data{other_user = OtherPid}) ->
+    {keep_state, Data};
+chat(cast, {user_request, Msg = <<"bye">>}, Data) ->
+    notice("Ricevuto messaggio \"~p\"~n", [Msg]),
+    notice_change(list_options),
+    {next_state, list_options, Data};
+chat(cast, {user_request, Msg}, Data) ->
+    notice("Ricevuto messaggio \"~p\"~n", [Msg]),
+    {keep_state, Data};
+chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user=OtherPid}) ->
+    set_available(self()),
+    notice("Invio messaggio \"~p\"~n", [Msg]),
+    gen_statem:cast(OtherPid, {user_request, Msg}),
+    notice_change(list_options),
+    {next_state, list_options, Data, {reply, From, ok}}; 
+chat({call, From}, {user_request, Msg}, Data = #data{other_user=OtherPid}) ->
+    notice("Invio messaggio \"~p\"~n", [Msg]),
+    gen_statem:cast(OtherPid, {user_request, Msg}),
+    {keep_state, Data, {reply, From, ok}};
+chat(Event, _Msg, Data) ->
+    unexpected(Event, chat),
+    {keep_state, Data}.
+    
+
+
+
+
+
+
+
+
+
         
 operator({call, From},
          {user_request, _Msg},
          Data = #data{msg_current = MsgCounter, msg_max = Max})
     when MsgCounter == 0 ->
-    {next_state,
-     list_options,
-     Data#data{msg_current = Max},
-     {reply, From, operator_timeout_msg(Data#data.username)}};
-operator({call, From},
-         {user_request, Msg},
-         Data = #data{server_pid = ServerPid, msg_current = MsgCounter})
-    when is_binary(Msg) ->
+    {next_state, list_options, Data#data{msg_current = Max}, {reply, From, operator_timeout_msg(Data#data.username)}};
+operator({call, From}, {user_request, Msg}, Data = #data{server_pid = ServerPid, msg_current = MsgCounter}) when is_binary(Msg) ->
     Str = erlang:binary_to_list(Msg),
     Answer =
         case string:to_integer(Str) of
@@ -111,16 +203,12 @@ operator({call, From},
         end,
     {keep_state, Data#data{msg_current = MsgCounter - 1}, {reply, From, Answer}};
 operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
-    gen_statem:cast(ServerPid, {send, operator_timeout_msg(Data#data.username)}),
+    tell_user(ServerPid, operator_timeout_msg(Data#data.username)),
     {next_state, list_options, Data}.
 
-terminate(_Reason, _State, _Data) ->
-    ok.
-
-code_change(_Vsn, State, Data, _Extra) ->
-    {ok, State, Data}.
-
-%% Private
+%%%%%%%%%%%%%%
+%% Messages %%
+%%%%%%%%%%%%%%
 
 get_joke() ->
     Chosen = rand:uniform(5),
@@ -140,7 +228,6 @@ get_joke() ->
             <<"I would tell you a UDP joke, but you might not get it.">>
     end.
 
--spec welcome_msg(User :: list()) -> binary().
 welcome_msg(User) when is_list(User) ->
     List =
         "WELCOME "
@@ -168,13 +255,6 @@ waiting_timeout_msg(User) when is_list(User) ->
           ++ binary:bin_to_list(welcome_msg(User)),
     erlang:list_to_binary(Msg).
 
-pick_user() ->
-    UserList = ets:select(?TABLE, ets:fun2ms(fun({K, V}) when V =:= ?AVAILABLE -> K end)),
-    N = rand:uniform(length(UserList)),
-    lists:nth(N, UserList).
-
-
-
 chat_msg(User) ->
     Msg = "You are now connected with " ++ User ++ "!~n" ++ "Stop by replying bye.",
     erlang:list_to_binary(Msg).
@@ -182,3 +262,45 @@ chat_msg(User) ->
 waiting_for_chat_msg() ->
     Msg = "Please wait for another user to be available.",
     erlang:list_to_binary(Msg).
+
+%%%%%%%%%%%%%%%%%
+%%  Utilities  %%
+%%%%%%%%%%%%%%%%%
+pick_user() ->
+    % Query = [{{'$1','$2'}, [{'andalso',{'=:=','$2',?AVAILABLE},{'=/=','$1',{self()}}}], ['$1']}],
+    Query = [{{'$1','$2'}, [{'=:=','$2',?AVAILABLE}], ['$1']}],
+    notice("QUERIED TABLE: ~p~n", [ets:select(?TABLE, Query)]),
+    Selected = 
+        case lists:delete(self(),ets:select(?TABLE, Query)) of
+            [] ->
+                [];
+            UserList when is_list(UserList) ->
+                notice("List of length ~p~n", [length(UserList)]),
+                N = rand:uniform(length(UserList)),
+                lists:nth(N, UserList)
+        end,
+    notice("picking users I chose ~p~n", [Selected]),
+    Selected.
+
+notice_change(NewState) ->
+    io:format("[~p] -> ~p ~n", [self(), NewState]).
+
+notice(Msg, Args) when is_list(Msg) ->
+    io:format("[~p] "++Msg, [self()]++Args).
+
+unexpected(Msg, State) ->
+    io:format("[~p] [UNEXPECTED] During ~p I got: ~p~n", [self(), State, Msg]).
+    
+set_available(User) ->
+    notice("changing ~p to available~n", [User]),
+    ets:insert(?TABLE, ?TABLE_DATA(User, ?AVAILABLE)).
+set_not_available(User) ->
+    notice("changing ~p to unavailable~n", [User]),
+    ets:insert(?TABLE, ?TABLE_DATA(User, ?NOT_AVAILABLE)).
+
+tell_user(ServerPid, Msg) when is_binary(Msg) ->
+    gen_statem:cast(ServerPid, {send, Msg}).
+
+check_presence_other_users() ->
+    gen_statem:cast(self(), check_presence_other_users).
+    
