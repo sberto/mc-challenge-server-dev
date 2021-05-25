@@ -2,6 +2,8 @@
 
 -behaviour(gen_statem).
 
+-include("tables.hrl").
+
 -define(NAME, automatron).
 
 -export([start_link/1]).
@@ -32,6 +34,7 @@ start_link([ServerPid, UserId, Socket, TimeoutSecs, MsgMax]) ->
                           []).
 
 init([Data = #data{}]) ->
+    ?SET_NOT_AVAILABLE(self()),
     {ok, list_options, Data}.
 
 callback_mode() ->
@@ -49,11 +52,10 @@ list_options({call, From}, {user_request, <<"3">>}, Data = #data{timeout = Timeo
      Data,
      [{state_timeout, Timeout * 1000, []}, {reply, From, operator_msg()}]};
 list_options({call, From}, {user_request, <<"4">>}, Data = #data{timeout = Timeout}) ->
-    User = pick_user(),
-    NewData = Data#data{other_user = User},
+    ?SET_AVAILABLE(self()),
     {next_state,
      waiting_for_chat,
-     NewData,
+     Data,
      [{state_timeout, Timeout * 1000, []}, {reply, From,  waiting_for_chat_msg()}]};
 list_options(cast, _Msg, Data) ->
     lager:info("automatron received a cast message."),
@@ -62,27 +64,27 @@ list_options({call, From}, Msg, Data) ->
     lager:info("automatron could not recognize the call with message ~p", [Msg]),
     {keep_state, Data, {reply, From, <<"bad_msg">>}}.
 
-waiting_for_chat({call, From}, {user_request, Msg}, Data) ->
-        case pick_user() of
-            false -> {keep_state, Data, {reply, From, <<"Please wait.">>}};
-            UserPid -> % TODO ack
-                NewData = Data#data{other_user = UserPid},
-                {next_state, chat, NewData, {reply, From,  chat_msg(UserPid)}}
-        end;
+waiting_for_chat({call, From}, connect, Data) ->
+    case pick_user() of
+        false -> {keep_state, Data, {reply, From, <<"Please wait.">>}};
+        UserPid -> % TODO ack
+            ?SET_NOT_AVAILABLE(self()),
+            NewData = Data#data{other_user = UserPid},
+            {next_state, chat, NewData, {reply, From,  chat_msg(UserPid)}}
+    end;
+waiting_for_chat({call, From}, _Msg, Data) ->
+    {keep_state, Data, {reply, From, waiting_for_chat_msg()}};
 waiting_for_chat(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
-        gen_statem:cast(ServerPid, {send, timeout_msg(Data#data.username)}),
+        ?SET_NOT_AVAILABLE(self()),
+        gen_statem:cast(ServerPid, {send, waiting_timeout_msg(Data#data.username)}),
         {next_state, list_options, Data}.
     
+chat({call, From}, {user_request, <<"bye">>}, Data) ->
+    ?SET_AVAILABLE(self()),
+    {keep_state, Data, {next_state, list_options, Data}};
 chat({call, From}, {user_request, Msg}, Data) ->
-    Reply =
-        if Msg == <<"bye">> ->
-               return_user_to_list(Data#data.other_user),
-               {next_state, list_options, Data};
-           true ->
-               {reply, From, Msg}
-        end,
-    {keep_state, Data, Reply}.
-
+    {keep_state, Data, {reply, From, Msg}}.
+        
 operator({call, From},
          {user_request, _Msg},
          Data = #data{msg_current = MsgCounter, msg_max = Max})
@@ -90,7 +92,7 @@ operator({call, From},
     {next_state,
      list_options,
      Data#data{msg_current = Max},
-     {reply, From, timeout_msg(Data#data.username)}};
+     {reply, From, operator_timeout_msg(Data#data.username)}};
 operator({call, From},
          {user_request, Msg},
          Data = #data{server_pid = ServerPid, msg_current = MsgCounter})
@@ -109,7 +111,7 @@ operator({call, From},
         end,
     {keep_state, Data#data{msg_current = MsgCounter - 1}, {reply, From, Answer}};
 operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
-    gen_statem:cast(ServerPid, {send, timeout_msg(Data#data.username)}),
+    gen_statem:cast(ServerPid, {send, operator_timeout_msg(Data#data.username)}),
     {next_state, list_options, Data}.
 
 terminate(_Reason, _State, _Data) ->
@@ -152,19 +154,26 @@ welcome_msg(User) when is_list(User) ->
 operator_msg() ->
     <<"I am the operator, how can I help you?">>.
 
-timeout_msg(User) when is_list(User) ->
+operator_timeout_msg(User) when is_list(User) ->
     Msg = "Your time with the operator has finished. Goodbye, "
           ++ User
           ++ "!~n"
           ++ binary:bin_to_list(welcome_msg(User)),
     erlang:list_to_binary(Msg).
 
-pick_user() ->
-    todo,
-    self().
+waiting_timeout_msg(User) when is_list(User) ->
+    Msg = "Your time has finished. Goodbye, "
+          ++ User
+          ++ "!~n"
+          ++ binary:bin_to_list(welcome_msg(User)),
+    erlang:list_to_binary(Msg).
 
-return_user_to_list(User) ->
-    todo.
+pick_user() ->
+    UserList = ets:select(?TABLE, ets:fun2ms(fun({K, V}) when V =:= ?AVAILABLE -> K end)),
+    N = rand:uniform(length(UserList)),
+    lists:nth(N, UserList).
+
+
 
 chat_msg(User) ->
     Msg = "You are now connected with " ++ User ++ "!~n" ++ "Stop by replying bye.",

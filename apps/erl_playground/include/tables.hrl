@@ -1,0 +1,6 @@
+-define(TABLE, client_pids).
+-define(AVAILABLE, available).
+-define(NOT_AVAILABLE, taken).
+-define(TABLE_DATA(PID,VAL), {PID, VAL}).
+-define(SET_NOT_AVAILABLE(User), ets:insert(?TABLE, ?TABLE_DATA(User, ?NOT_AVAILABLE))).
+-define(SET_AVAILABLE(User), ets:insert(?TABLE, ?TABLE_DATA(User, ?AVAILABLE))).

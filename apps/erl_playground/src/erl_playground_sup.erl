@@ -1,6 +1,7 @@
 -module(erl_playground_sup).
 
 -behaviour(supervisor).
+-include("tables.hrl").
 
 %% API
 -export([start_link/0]).
@@ -26,6 +27,7 @@ start_link() ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
+    ets:new(?TABLE, [set, named_table, public]),
 
     MaxR = 1000, % how many times
     MaxT = 10, % in how many seconds
