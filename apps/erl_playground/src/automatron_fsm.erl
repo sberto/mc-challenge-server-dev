@@ -6,7 +6,7 @@
 
 -export([start_link/1]).
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
--export([list_options/3, operator/3, chat/3]). %% states
+-export([list_options/3, operator/3, waiting_for_chat/3, chat/3]). %% states
 
 -record(data,
         {server_pid,
@@ -48,10 +48,13 @@ list_options({call, From}, {user_request, <<"3">>}, Data = #data{timeout = Timeo
      operator,
      Data,
      [{state_timeout, Timeout * 1000, []}, {reply, From, operator_msg()}]};
-list_options({call, From}, {user_request, <<"4">>}, Data) ->
-    User = pick_user_from_list(),
+list_options({call, From}, {user_request, <<"4">>}, Data = #data{timeout = Timeout}) ->
+    User = pick_user(),
     NewData = Data#data{other_user = User},
-    {next_state, chat, NewData, {reply, From, chat_msg(pid_to_list(User))}};
+    {next_state,
+     waiting_for_chat,
+     NewData,
+     [{state_timeout, Timeout * 1000, []}, {reply, From,  waiting_for_chat_msg()}]};
 list_options(cast, _Msg, Data) ->
     lager:info("automatron received a cast message."),
     {next_state, list_options, Data};
@@ -59,6 +62,17 @@ list_options({call, From}, Msg, Data) ->
     lager:info("automatron could not recognize the call with message ~p", [Msg]),
     {keep_state, Data, {reply, From, <<"bad_msg">>}}.
 
+waiting_for_chat({call, From}, {user_request, Msg}, Data) ->
+        case pick_user() of
+            false -> {keep_state, Data, {reply, From, <<"Please wait.">>}};
+            UserPid -> % TODO ack
+                NewData = Data#data{other_user = UserPid},
+                {next_state, chat, NewData, {reply, From,  chat_msg(UserPid)}}
+        end;
+waiting_for_chat(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
+        gen_statem:cast(ServerPid, {send, timeout_msg(Data#data.username)}),
+        {next_state, list_options, Data}.
+    
 chat({call, From}, {user_request, Msg}, Data) ->
     Reply =
         if Msg == <<"bye">> ->
@@ -145,7 +159,7 @@ timeout_msg(User) when is_list(User) ->
           ++ binary:bin_to_list(welcome_msg(User)),
     erlang:list_to_binary(Msg).
 
-pick_user_from_list() ->
+pick_user() ->
     todo,
     self().
 
@@ -154,4 +168,8 @@ return_user_to_list(User) ->
 
 chat_msg(User) ->
     Msg = "You are now connected with " ++ User ++ "!~n" ++ "Stop by replying bye.",
+    erlang:list_to_binary(Msg).
+
+waiting_for_chat_msg() ->
+    Msg = "Please wait for another user to be available.",
     erlang:list_to_binary(Msg).
