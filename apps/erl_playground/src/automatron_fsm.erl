@@ -199,7 +199,6 @@ chat(cast, {tell_other_user, Msg}, Data=#data{server_pid = ServerPid, other_user
     tell_user(ServerPid, NewMsg),
     {keep_state, Data};
 chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user_pid=OtherPid, server_pid = ServerPid}) ->
-    set_available(Data#data.username),
     notice("Sending message \"~p\"~n", [Msg]),
     gen_statem:cast(OtherPid, {tell_other_user, Msg}),
     notice_change(list_options),
