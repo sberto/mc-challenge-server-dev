@@ -120,6 +120,7 @@ idle(cast, {ask_chat, OtherPid}, Data = #data{timeout = Timeout}) ->
     Ref = monitor(process, OtherPid),
     notice_change(idle_wait),
     accept_chat(OtherPid),
+    set_not_available(Data#data.username),
     {next_state, idle_wait, Data#data{other_user_pid = OtherPid, monitor = Ref}, [{state_timeout, Timeout * 1000, []}]};
 idle(cast, {my_username_is, OtherUsername}, Data = #data{}) ->
     {keep_state, Data#data{other_username = OtherUsername}};
