@@ -116,13 +116,13 @@ list_options(_, Event, Data = #data{}) ->
     unexpected(Event, idle),
     {keep_state, Data}.
 
-idle(cast, {ask_chat, OtherPid}, D = #data{timeout = Timeout}) ->
+idle(cast, {ask_chat, OtherPid}, Data = #data{timeout = Timeout}) ->
     Ref = monitor(process, OtherPid),
     notice_change(idle_wait),
     accept_chat(OtherPid),
-    {next_state, idle_wait, D#data{other_user_pid = OtherPid, monitor = Ref}, [{state_timeout, Timeout * 1000, []}]};
-idle(cast, {my_username_is, OtherUsername}, D = #data{}) ->
-    {keep_state, D#data{other_username = OtherUsername}};
+    {next_state, idle_wait, Data#data{other_user_pid = OtherPid, monitor = Ref}, [{state_timeout, Timeout * 1000, []}]};
+idle(cast, {my_username_is, OtherUsername}, Data = #data{}) ->
+    {keep_state, Data#data{other_username = OtherUsername}};
 idle(cast, check_presence_other_users, Data = #data{timeout = Timeout, server_pid = ServerPid}) ->
     case pick_user() of
         [] -> 
@@ -151,20 +151,20 @@ idle(_, Event, Data = #data{}) ->
     
 
 %% idle_wait allows to expect replies from the other side and start chat 
-idle_wait(cast, {ask_chat, OtherPid}, D = #data{other_user_pid = OtherPid, server_pid = ServerPid, other_username = OtherUsername}) ->
+idle_wait(cast, {ask_chat, OtherPid}, Data = #data{other_user_pid = OtherPid, server_pid = ServerPid, other_username = OtherUsername}) ->
     accept_chat(OtherPid),
     notice_change(chat),
     % presentations
     tell_user(ServerPid, enter_chat_msg(OtherUsername)),
-    {next_state, chat, D};
-idle_wait(cast, {my_username_is, OtherUsername}, D = #data{}) ->
-    {keep_state, D#data{other_username = OtherUsername}};
-idle_wait(cast, {accept_chat, OtherPid}, D = #data{other_user_pid = OtherPid, server_pid = ServerPid, other_username = OtherUsername}) ->
+    {next_state, chat, Data};
+idle_wait(cast, {my_username_is, OtherUsername}, Data = #data{}) ->
+    {keep_state, Data#data{other_username = OtherUsername}};
+idle_wait(cast, {accept_chat, OtherPid}, Data = #data{other_user_pid = OtherPid, server_pid = ServerPid, other_username = OtherUsername}) ->
     accept_chat(OtherPid),
     notice_change(chat),
     % presentations
     tell_user(ServerPid, enter_chat_msg(OtherUsername)),
-    {next_state, chat, D};
+    {next_state, chat, Data};
 idle_wait(info, {'DOWN', Monitor,_,_,_}, Data = #data{monitor=Monitor}) ->
     notice('Other user left, going back to idle', []),
     notice_change(idle),
@@ -192,6 +192,7 @@ chat(cast, {accept_chat, OtherPid}, Data = #data{other_user_pid = OtherPid}) ->
 chat(cast, {tell_other_user, Msg = <<"bye">>}, Data = #data{server_pid = ServerPid}) ->
     notice("Received the message: \"~p\"~n", [Msg]),
     notice_change(list_options),
+	tell_user(ServerPid, <<"The other user left the chat.">>),
 	tell_user(ServerPid, welcome_msg()),
     {next_state, list_options, Data};
 chat(cast, {tell_other_user, Msg}, Data=#data{server_pid = ServerPid, other_username=OtherUsername}) when is_binary(Msg) ->
@@ -214,8 +215,8 @@ chat(info, {'DOWN', Monitor,_,_,_}, Data = #data{monitor=Monitor, server_pid = S
     notice_change(list_options),
 	tell_user(ServerPid, welcome_msg()),
     {next_state, list_options, Data};
-chat(Event, _Msg, Data = #data{}) ->
-    unexpected(Event, chat),
+chat(Event, Msg, Data = #data{}) ->
+    unexpected([Event, Msg], chat),
     {keep_state, Data}.    
 
 
