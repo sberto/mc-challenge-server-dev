@@ -123,9 +123,11 @@ idle(cast, {ask_chat, OtherPid}, D = #data{timeout = Timeout}) ->
     {next_state, idle_wait, D#data{other_user_pid = OtherPid, monitor = Ref}, [{state_timeout, Timeout * 1000, []}]};
 idle(cast, {my_username_is, OtherUsername}, D = #data{}) ->
     {keep_state, D#data{other_username = OtherUsername}};
-idle(cast, check_presence_other_users, Data = #data{timeout = Timeout}) ->
+idle(cast, check_presence_other_users, Data = #data{timeout = Timeout, server_pid = ServerPid}) ->
     case pick_user() of
-        [] -> {keep_state, Data};
+        [] -> 
+            tell_user(ServerPid, <<"There are no users available at the moment. Please wait.">>),
+            {keep_state, Data};
         [OtherPid, OtherUsername] -> 
             set_not_available(Data#data.username),
             ask_chat(OtherPid),
@@ -164,7 +166,7 @@ idle_wait(cast, {accept_chat, OtherPid}, D = #data{other_user_pid = OtherPid, se
     tell_user(ServerPid, enter_chat_msg(OtherUsername)),
     {next_state, chat, D};
 idle_wait(info, {'DOWN', Monitor,_,_,_}, Data = #data{monitor=Monitor}) ->
-    lager:info('Other user left, going back to idle'),
+    notice('Other user left, going back to idle', []),
     notice_change(idle),
     {next_state, idle, Data};
 idle_wait(cast, Event, Data = #data{}) ->
