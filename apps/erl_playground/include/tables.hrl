@@ -1,4 +1,4 @@
 -define(TABLE, client_pids).
 -define(AVAILABLE, available).
 -define(NOT_AVAILABLE, taken).
--define(TABLE_DATA(PID,VAL), {PID, VAL}).
+-define(TABLE_DATA(PID, AVAILABILITY, USERNAME), {PID, AVAILABILITY, USERNAME}).
