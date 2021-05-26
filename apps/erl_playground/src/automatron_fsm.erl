@@ -161,6 +161,10 @@ idle_wait(cast, {accept_chat, OtherPid}, D = #data{other_user_pid = OtherPid, se
     % presentations
     tell_user(ServerPid, enter_chat_msg(OtherUsername)),
     {next_state, chat, D};
+idle_wait(info, {'DOWN', Monitor,_,_,_}, Data = #data{monitor=Monitor}) ->
+    lager:info('Other user left, going back to idle'),
+    notice_change(idle),
+    {next_state, idle, Data};
 idle_wait(cast, Event, Data = #data{}) ->
     unexpected(Event, idle_wait),
     {keep_state, Data};
@@ -268,20 +272,14 @@ get_joke() ->
     end.
 
 welcome_msg(User) when is_list(User) ->
-    List =
-        "WELCOME " ++ User ++ " TO AUTOMATRON CALL CENTER~n"
-        "1 - Press 1 to receive the jokes of the day.~n"
-        "2 - Press 2 to know your unique identifier for the call.~n"
-        "3 - Press 3 to talk to an operator.~n"
-        "4 - Press 4 to chat with another user.~n"
-        "0 - Press 0 to listen to this message again.",
+    List = "WELCOME " ++ User ++ " TO AUTOMATRON CALL CENTER~n" ++ welcome_msg(),
     list_to_binary(List).
 welcome_msg() ->
-    List =
-        "1 - Press 1 to receive the jokes "
-            "of the day.~n2 - Press 2 to know your unique identifier for "
-            "the call.~n3 - Press 3 to talk to an operator.~n0 - Press 0 "
-            "to listen to this message again.",
+    List = "1 - Press 1 to receive the jokes of the day.~n"
+            "2 - Press 2 to know your unique identifier for the call.~n"
+            "3 - Press 3 to talk to an operator.~n"
+            "4 - Press 4 to chat with another user.~n"
+            "0 - Press 0 to listen to this message again.",
     list_to_binary(List).
         
 operator_msg() ->
