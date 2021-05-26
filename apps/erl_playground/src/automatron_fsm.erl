@@ -179,8 +179,9 @@ chat(cast, {tell_other_user, Msg = <<"bye">>}, Data) ->
     notice("Ricevuto messaggio \"~p\"~n", [Msg]),
     notice_change(list_options),
     {next_state, list_options, Data};
-chat(cast, {tell_other_user, Msg}, Data=#data{server_pid = ServerPid}) when is_binary(Msg) ->
-    tell_user(ServerPid, Msg),
+chat(cast, {tell_other_user, Msg}, Data=#data{server_pid = ServerPid, username=MyUsername}) when is_binary(Msg) ->
+    NewMsg = prepend_username(MyUsername, Msg),
+    tell_user(ServerPid, NewMsg),
     {keep_state, Data};
 chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user_pid=OtherPid}) ->
     set_available(Data#data.username),
@@ -332,4 +333,7 @@ tell_user(ServerPid, Msg) when is_binary(Msg) ->
 
 check_presence_other_users() ->
     gen_statem:cast(self(), check_presence_other_users).
-    
+
+prepend_username(MyUsername, Msg) ->
+    NewMsg = MyUsername++" says: "++binary:bin_to_list(Msg),
+    binary:list_to_bin(NewMsg).
