@@ -68,6 +68,11 @@ callback_mode() ->
     state_functions.
 
 terminate(_Reason, _State, _Data) ->
+    MyEntry = ets:lookup(?TABLE, self()),
+    if MyEntry =/= [] ->
+        ets:delete(?TABLE, MyEntry),
+        lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
+    end,
     ok.
 
 code_change(_Vsn, State, Data, _Extra) ->

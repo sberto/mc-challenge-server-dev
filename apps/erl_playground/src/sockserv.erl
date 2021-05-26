@@ -3,6 +3,7 @@
 -behaviour(ranch_protocol).
 
 -include("erl_playground_pb.hrl").
+-include("tables.hrl").
 
 %% ------------------------------------------------------------------
 %% API Function Exports
@@ -125,7 +126,20 @@ handle_call(Message, _From, State) ->
     _ = lager:notice("unknown handle_call ~p", [Message]),
     {noreply, State}.
 
-terminate(normal, _State) ->
+terminate(normal, _Data = {_, State = #state{}}) ->
+        MyEntry = ets:lookup(?TABLE, State#state.automatron_pid),
+        if MyEntry =/= [] ->
+            ets:delete(?TABLE, MyEntry),
+            lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
+        end,
+        _ = lager:info("Goodbye!"),
+        ok;
+terminate(_, _Data = {_, State = #state{}}) ->
+    MyEntry = ets:lookup(?TABLE, State#state.automatron_pid),
+    if MyEntry =/= [] ->
+        ets:delete(?TABLE, MyEntry),
+        lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
+    end,
     _ = lager:info("Goodbye!"),
     ok;
 terminate(Reason, _State) ->
