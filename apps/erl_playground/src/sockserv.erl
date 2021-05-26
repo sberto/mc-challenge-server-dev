@@ -127,23 +127,17 @@ handle_call(Message, _From, State) ->
     {noreply, State}.
 
 terminate(normal, _Data = {_, State = #state{}}) ->
-        MyEntry = ets:lookup(?TABLE, State#state.automatron_pid),
-        if MyEntry =/= [] ->
-            ets:delete(?TABLE, MyEntry),
-            lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
-        end,
-        _ = lager:info("Goodbye!"),
-        ok;
-terminate(_, _Data = {_, State = #state{}}) ->
     MyEntry = ets:lookup(?TABLE, State#state.automatron_pid),
     if MyEntry =/= [] ->
         ets:delete(?TABLE, MyEntry),
         lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
     end,
+    exit(State#state.automatron_pid, kill),
     _ = lager:info("Goodbye!"),
     ok;
-terminate(Reason, _State) ->
+terminate(Reason, _Data = {_, State = #state{}}) ->
     _ = lager:notice("No terminate for ~p", [Reason]),
+    exit(State#state.automatron_pid, kill),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

@@ -67,7 +67,8 @@ init([Data = #data{}]) ->
 callback_mode() ->
     state_functions.
 
-terminate(_Reason, _State, _Data) ->
+terminate(_Reason, _State, _Data = #data{}) ->
+    lager:info("Automatron is killed."),
     MyEntry = ets:lookup(?TABLE, self()),
     if MyEntry =/= [] ->
         ets:delete(?TABLE, MyEntry),
@@ -82,11 +83,11 @@ code_change(_Vsn, State, Data, _Extra) ->
 %% States %%
 %%%%%%%%%%%%
 
-list_options({call, From}, {user_request, <<"0">>}, Data) ->
+list_options({call, From}, {user_request, <<"0">>}, Data = #data{}) ->
     {keep_state, Data, {reply, From, welcome_msg(Data#data.username)}};
-list_options({call, From}, {user_request, <<"1">>}, Data) ->
+list_options({call, From}, {user_request, <<"1">>}, Data = #data{}) ->
     {keep_state, Data, {reply, From, get_joke()}};
-list_options({call, From}, {user_request, <<"2">>}, Data) ->
+list_options({call, From}, {user_request, <<"2">>}, Data = #data{}) ->
     {keep_state, Data, {reply, From, atom_to_binary(Data#data.unique)}};
 list_options({call, From}, {user_request, <<"3">>}, Data = #data{timeout = Timeout}) ->
     {next_state,
@@ -101,15 +102,15 @@ list_options({call, From}, {user_request, <<"4">>}, Data = #data{timeout = Timeo
      idle,
      Data,
      [{state_timeout, Timeout * 10 * 1000, []}, {reply, From,  waiting_for_chat_msg()}]};
-list_options(cast, check_presence_other_users, Data) ->
+list_options(cast, check_presence_other_users, Data = #data{}) ->
     {keep_state, Data, [postpone]};
-list_options(cast, _Msg, Data) ->
+list_options(cast, _Msg, Data = #data{}) ->
         lager:info("automatron received a cast message."),
         {next_state, list_options, Data};
-list_options({call, From}, Msg, Data) ->
+list_options({call, From}, Msg, Data = #data{}) ->
     lager:info("automatron could not recognize the call with message ~p", [Msg]),
     {keep_state, Data, {reply, From, <<"bad_msg">>}};
-list_options(_, Event, Data) ->
+list_options(_, Event, Data = #data{}) ->
     unexpected(Event, idle),
     {keep_state, Data}.
 
@@ -131,16 +132,16 @@ idle(cast, check_presence_other_users, Data = #data{timeout = Timeout}) ->
             tell_other_my_username(OtherPid, Data#data.username),
             {next_state, idle_wait, Data#data{other_user_pid = OtherPid, monitor = Ref, other_username = OtherUsername}, [{state_timeout, Timeout * 1000, []}]}
     end;
-idle(cast, Event, Data) ->
+idle(cast, Event, Data = #data{}) ->
     unexpected(Event, idle),
     {keep_state, Data};
-idle({call, From}, _Msg, Data) ->
+idle({call, From}, _Msg, Data = #data{}) ->
     {keep_state, Data, {reply, From, waiting_for_chat_msg()}};
 idle(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
     set_not_available(Data#data.username),
     tell_user(ServerPid, waiting_timeout_msg(Data#data.username)),
     {next_state, list_options, Data};
-idle(_, Event, Data) ->
+idle(_, Event, Data = #data{}) ->
     unexpected(Event, idle),
     {keep_state, Data}.
     
@@ -160,17 +161,17 @@ idle_wait(cast, {accept_chat, OtherPid}, D = #data{other_user_pid = OtherPid, se
     % presentations
     tell_user(ServerPid, enter_chat_msg(OtherUsername)),
     {next_state, chat, D};
-idle_wait(cast, Event, Data) ->
+idle_wait(cast, Event, Data = #data{}) ->
     unexpected(Event, idle_wait),
     {keep_state, Data};
-idle_wait({call, _From}, Event, Data) ->
+idle_wait({call, _From}, Event, Data = #data{}) ->
     unexpected(Event, idle_wait),
     {keep_state, Data};
 idle_wait(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
     set_not_available(Data#data.username),
     tell_user(ServerPid, waiting_timeout_msg(Data#data.username)),
     {next_state, list_options, Data};
-idle_wait(_, Event, Data) ->
+idle_wait(_, Event, Data = #data{}) ->
     unexpected(Event, idle_wait),
     {keep_state, Data}.
 
@@ -180,31 +181,34 @@ idle_wait(_, Event, Data) ->
 
 chat(cast, {accept_chat, OtherPid}, Data = #data{other_user_pid = OtherPid}) ->
     {keep_state, Data};
-chat(cast, {tell_other_user, Msg = <<"bye">>}, Data) ->
+chat(cast, {tell_other_user, Msg = <<"bye">>}, Data = #data{server_pid = ServerPid}) ->
     notice("Received the message: \"~p\"~n", [Msg]),
     notice_change(list_options),
+	tell_user(ServerPid, welcome_msg()),
     {next_state, list_options, Data};
 chat(cast, {tell_other_user, Msg}, Data=#data{server_pid = ServerPid, username=MyUsername}) when is_binary(Msg) ->
     NewMsg = prepend_username(MyUsername, Msg),
     tell_user(ServerPid, NewMsg),
     {keep_state, Data};
-chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user_pid=OtherPid}) ->
+chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user_pid=OtherPid, server_pid = ServerPid}) ->
     set_available(Data#data.username),
     notice("Sending message \"~p\"~n", [Msg]),
     gen_statem:cast(OtherPid, {tell_other_user, Msg}),
     notice_change(list_options),
+	tell_user(ServerPid, welcome_msg()),
     {next_state, list_options, Data, {reply, From, silent}}; 
 chat({call, From}, {user_request, Msg}, Data = #data{other_user_pid=OtherPid}) ->
     notice("Sending message \"~p\" to ~p~n", [Msg, OtherPid]),
     gen_statem:cast(OtherPid, {tell_other_user, Msg}),
     {keep_state, Data, {reply, From, silent}};
-chat(Event, _Msg, Data) ->
+chat(info, {'DOWN', Monitor,_,_,_}, Data = #data{monitor=Monitor, server_pid = ServerPid}) ->
+    tell_user(ServerPid, <<"The other user left abruptly.">>),
+    notice_change(list_options),
+	tell_user(ServerPid, welcome_msg()),
+    {next_state, list_options, Data};
+chat(Event, _Msg, Data = #data{}) ->
     unexpected(Event, chat),
-    {keep_state, Data};
-chat(_, Event, Data) ->
-    unexpected(Event, chat),
-    {keep_state, Data}.
-    
+    {keep_state, Data}.    
 
 
 
@@ -237,7 +241,7 @@ operator({call, From}, {user_request, Msg}, Data = #data{server_pid = ServerPid,
 operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
     tell_user(ServerPid, operator_timeout_msg(Data#data.username)),
     {next_state, list_options, Data};
-operator(_, Event, Data) ->
+operator(_, Event, Data = #data{}) ->
     unexpected(Event, operator),
     {keep_state, Data}.
 
@@ -265,14 +269,21 @@ get_joke() ->
 
 welcome_msg(User) when is_list(User) ->
     List =
-        "WELCOME "
-        ++ User
-        ++ " TO AUTOMATRON CALL CENTER~n1 - Press 1 to receive the jokes "
-           "of the day.~n2 - Press 2 to know your unique identifier for "
-           "the call.~n3 - Press 3 to talk to an operator.~n0 - Press 0 "
-           "to listen to this message again.",
+        "WELCOME " ++ User ++ " TO AUTOMATRON CALL CENTER~n"
+        "1 - Press 1 to receive the jokes of the day.~n"
+        "2 - Press 2 to know your unique identifier for the call.~n"
+        "3 - Press 3 to talk to an operator.~n"
+        "4 - Press 4 to chat with another user.~n"
+        "0 - Press 0 to listen to this message again.",
     list_to_binary(List).
-
+welcome_msg() ->
+    List =
+        "1 - Press 1 to receive the jokes "
+            "of the day.~n2 - Press 2 to know your unique identifier for "
+            "the call.~n3 - Press 3 to talk to an operator.~n0 - Press 0 "
+            "to listen to this message again.",
+    list_to_binary(List).
+        
 operator_msg() ->
     <<"I am the operator, how can I help you?">>.
 
