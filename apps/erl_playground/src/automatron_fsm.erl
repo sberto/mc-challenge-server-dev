@@ -6,7 +6,7 @@
 
 -define(NAME, automatron).
 
--export([start_link/1]).
+-export([start_link/1, delete_automatron_pid/1]).
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
 -export([list_options/3, operator/3, idle/3, idle_wait/3, chat/3]). %% states
 
@@ -39,6 +39,12 @@ start_link([ServerPid, UserId, Socket, TimeoutSecs, MsgMax]) ->
                                  msg_current = MsgMax}],
                           []).
 
+delete_automatron_pid(Pid) ->
+    MyEntry = ets:lookup(?TABLE, Pid),
+    if MyEntry =/= [] ->
+        ets:delete(?TABLE, MyEntry),
+        lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
+    end.
 %%%%%%%%%%%%%%%%%%%%%%%%%
 %% Client-Client API   %%
 %% All calls are async %%
@@ -69,11 +75,7 @@ callback_mode() ->
 
 terminate(_Reason, _State, _Data = #data{}) ->
     lager:info("Automatron is killed."),
-    MyEntry = ets:lookup(?TABLE, self()),
-    if MyEntry =/= [] ->
-        ets:delete(?TABLE, MyEntry),
-        lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
-    end,
+    automatron_fsm:delete_automatron_pid(self()),
     ok.
 
 code_change(_Vsn, State, Data, _Extra) ->

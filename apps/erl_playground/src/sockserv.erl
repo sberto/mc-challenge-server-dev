@@ -126,17 +126,14 @@ handle_call(Message, _From, State) ->
     _ = lager:notice("unknown handle_call ~p", [Message]),
     {noreply, State}.
 
-terminate(normal, _Data = {_, State = #state{}}) ->
-    MyEntry = ets:lookup(?TABLE, State#state.automatron_pid),
-    if MyEntry =/= [] ->
-        ets:delete(?TABLE, MyEntry),
-        lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
-    end,
+terminate(normal, _Data = {_, State = #state{automatron_pid = Pid}}) ->
+    automatron_fsm:delete_automatron_pid(Pid),
     exit(State#state.automatron_pid, kill),
     _ = lager:info("Goodbye!"),
     ok;
-terminate(Reason, _Data = {_, State = #state{}}) ->
+terminate(Reason, _Data = {_, State = #state{automatron_pid = Pid}}) ->
     _ = lager:notice("No terminate for ~p", [Reason]),
+    automatron_fsm:delete_automatron_pid(Pid),
     exit(State#state.automatron_pid, kill),
     ok.
 
