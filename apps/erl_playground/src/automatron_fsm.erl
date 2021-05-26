@@ -40,11 +40,9 @@ start_link([ServerPid, UserId, Socket, TimeoutSecs, MsgMax]) ->
                           []).
 
 delete_automatron_pid(Pid) ->
-    MyEntry = ets:lookup(?TABLE, Pid),
-    if MyEntry =/= [] ->
-        ets:delete(?TABLE, MyEntry),
-        lager:info("Deleting ~p from the table ~p", [MyEntry, ?TABLE])
-    end.
+    ets:delete(?TABLE, Pid),
+    lager:info("Deleting ~p from the table ~p", [Pid, ?TABLE]).
+    
 %%%%%%%%%%%%%%%%%%%%%%%%%
 %% Client-Client API   %%
 %% All calls are async %%
