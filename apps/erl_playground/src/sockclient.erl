@@ -8,8 +8,8 @@
 %% ------------------------------------------------------------------
 
 -export([start_link/0]). -ignore_xref([{start_link, 4}]).
--export([connect/0, disconnect/0]).
--export([send_create_session/0, send_create_session/1, send_user_request/1]).
+-export([connect/1, disconnect/1]).
+-export([send_create_session/2, send_user_request/2]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -31,7 +31,7 @@
 %% Macro Definitions
 %% ------------------------------------------------------------------
 
--define(SERVER, ?MODULE).
+-define(SERVER, default).
 -define(CB_MODULE, ?MODULE).
 
 %% ------------------------------------------------------------------
@@ -39,42 +39,37 @@
 %% ------------------------------------------------------------------
 
 start_link() ->
-    {ok, _} = gen_server:start_link({local, ?SERVER}, ?CB_MODULE, [], []).
+    {ok, _} = gen_server:start_link({local, list_to_atom(ref_to_list(make_ref()))}, ?CB_MODULE, [], []).
 
--spec connect() -> ok.
-connect() ->
-    gen_server:call(whereis(?SERVER), connect),
+-spec connect(Pid :: pid()) -> ok.
+connect(Pid) when is_pid(Pid) ->
+    gen_server:call(Pid, connect),
     ok.
 
--spec disconnect() -> ok.
-disconnect() ->
-    gen_server:call(whereis(?SERVER), disconnect),
+-spec disconnect(Pid :: pid()) -> ok.
+disconnect(Pid) when is_pid(Pid) ->
+    gen_server:call(Pid, disconnect),
     ok.
 
--spec send_create_session() -> ok.
-send_create_session() ->
-    CreateSession = #create_session {
-        username = <<"TestUser">>
-    },
-    gen_server:cast(whereis(?SERVER), {create_session, CreateSession}).
-send_create_session(UsernameList) when is_list(UsernameList) ->
+-spec send_create_session(Pid :: pid(), UsernameList :: list()) -> ok.
+send_create_session(Pid, UsernameList) when is_list(UsernameList) andalso is_pid(Pid) ->
     Username = list_to_binary(UsernameList),
     CreateSession = #create_session {
         username = Username
     },
-    gen_server:cast(whereis(?SERVER), {create_session, CreateSession}).
+    gen_server:cast(Pid, {create_session, CreateSession}).
 
-send_user_request(Num) when is_number(Num) ->
+send_user_request(Pid, Num) when is_number(Num) andalso is_pid(Pid) ->
     UserReq = #user_request {
         message = list_to_binary(integer_to_list(Num))
     },
-    gen_server:cast(whereis(?SERVER), {user_request, UserReq});
-send_user_request(Str) when is_list(Str) ->
+    gen_server:cast(Pid, {user_request, UserReq});
+send_user_request(Pid, Str) when is_list(Str) andalso is_pid(Pid) ->
     UserReq = #user_request {
         message = list_to_binary(Str)
     },
-    gen_server:cast(whereis(?SERVER), {user_request, UserReq});
-send_user_request(_) ->
+    gen_server:cast(Pid, {user_request, UserReq});
+send_user_request(_, _) ->
     bad_argument.
 
 %% ------------------------------------------------------------------
@@ -84,7 +79,7 @@ send_user_request(_) ->
 %% This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
 init(_ARgs) ->
-    lager:info("sockclient init'ed"),
+    lager:info("sockclient init'ed with pid ~p", [self()]),
     {ok, #state{}}.
 
 handle_cast({create_session, CreateSession}, #state{socket = Socket} = State)
