@@ -41,7 +41,7 @@ rebar shell
 and
 
 ```erlang
-> sockclient:connect().```
+> sockclient:connect().
 > sockclient:send_create_session().
 ```
 
