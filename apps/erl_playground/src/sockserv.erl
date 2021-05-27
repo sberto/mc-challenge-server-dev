@@ -126,15 +126,13 @@ handle_call(Message, _From, State) ->
     _ = lager:notice("unknown handle_call ~p", [Message]),
     {noreply, State}.
 
-terminate(normal, _Data = {_, State = #state{automatron_pid = Pid}}) ->
-    automatron_fsm:delete_automatron_pid(Pid),
-    exit(State#state.automatron_pid, kill),
+terminate(normal, _Data = {_, _State = #state{automatron_pid = Pid}}) ->
+    automatron_kill(Pid),
     _ = lager:info("Goodbye!"),
     ok;
-terminate(Reason, _Data = {_, State = #state{automatron_pid = Pid}}) ->
+terminate(Reason, _Data = {_, _State = #state{automatron_pid = Pid}}) ->
+    automatron_kill(Pid),
     _ = lager:notice("No terminate for ~p", [Reason]),
-    automatron_fsm:delete_automatron_pid(Pid),
-    exit(State#state.automatron_pid, kill),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -191,3 +189,10 @@ send_server_message(silent, _Transport, _Socket) ->
         ok;
 send_server_message(Msg, _Transport, _Socket) ->
     lager:info("[WARN] received ~p in send_server_message", [Msg]).
+
+automatron_kill(Pid) when is_pid(Pid) ->
+    automatron_fsm:delete_automatron_pid(Pid),
+    exit(Pid, kill),
+    ok;
+automatron_kill(_) ->
+    ok.
