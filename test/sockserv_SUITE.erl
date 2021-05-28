@@ -28,7 +28,7 @@ groups() ->
         {group_multiple_access_one_username, [], [{group, subgroup_multiple_access_one_username}, check_no_user_left]},
         {subgroup_multiple_access_one_username, [parallel], [client_1_access, client_1_access, client_1_access]},
       
-        {group_welcome_list_selection_and_availability, [], [client_wl_1, client_wl_2, client_wl_3, client_wl_4]}
+        {group_welcome_list_selection_and_availability, [sequence], [client_wl_joke, client_wl_id, client_wl_operator, client_wl_chat]}
 
         % {group_3_users_operator_connection,	[parallel],						[client_3_operator_connection]},
         % {group_2_users_chat,					[parallel, {repeat, 10}],		[client_2_chat]},
@@ -45,12 +45,14 @@ end_per_group(_, _Config) -> ok.
 %%%%%%%%%%%%%%%
 
 %% setup
-init_per_testcase(client_wl_1, Config) ->
+init_per_testcase(client_wl_joke, Config) ->
     [ {user_msg, ?WL_JOKE} | config_connection(Config)];
-init_per_testcase(client_wl_2, Config) ->
+init_per_testcase(client_wl_id, Config) ->
     [ {user_msg, ?WL_ID} | config_connection(Config)];
-init_per_testcase(client_wl_3, Config) ->
+init_per_testcase(client_wl_operator, Config) ->
     [ {user_msg, ?WL_OPERATOR} | config_connection(Config)];
+init_per_testcase(client_wl_chat, Config) ->
+    [ {user_msg, ?WL_CHAT} | config_connection(Config)];
 init_per_testcase(client_1_access, Config) ->
     config_connection_no_create_session(Config);
 init_per_testcase(check_no_user_left, Config) ->
@@ -69,22 +71,14 @@ end_per_testcase(_, Config) ->
 client_1_access(Config) ->
     ok = sockclient:send_create_session(?config(my_pid, Config), "User").
 
-client_wl_1(Config) ->
-    check_available_not_available(0, 1),
-    send_user_request_from_config(Config),
-    check_available_not_available(0, 1).
-client_wl_2(Config) ->
-    check_available_not_available(0, 1),
-    send_user_request_from_config(Config),
-    check_available_not_available(0, 1).
-client_wl_3(Config) ->
-    check_available_not_available(0, 1),
-    send_user_request_from_config(Config),
-    check_available_not_available(0, 1).
-client_wl_4(Config) ->
-    check_available_not_available(0, 1),
-    send_user_request_from_config(Config),
-    check_available_not_available(1, 0).
+client_wl_joke(Config) ->
+    check_client_no_chat(Config).
+client_wl_id(Config) ->
+    check_client_no_chat(Config).
+client_wl_operator(Config) ->
+    check_client_no_chat(Config).
+client_wl_chat(Config) ->
+    check_client_chat(Config).
 
 client_3_operator_connection(Config) ->
 	Pids = [?config(my_pid, Config), create_client(), create_client()],
@@ -136,11 +130,22 @@ send_user_request(Pid, Req) ->
 send_user_request_from_config(Config) ->
 	ok = sockclient:send_user_request(?config(my_pid, Config), ?config(user_msg, Config)).
 	
+check_client_no_chat(Config) ->
+    check_available_not_available(0, 1),
+    send_user_request_from_config(Config),
+    check_available_not_available(0, 1).
+
+check_client_chat(Config) ->
+    check_available_not_available(0, 1),
+    send_user_request_from_config(Config),
+    check_available_not_available(1, 0).
+
 %%%%%%%%%%%%%%%
 %% FUNCTIONS %%
 %%%%%%%%%%%%%%%
 
 check_available_not_available(A, NA) ->
+    timer:sleep(1),
     {A, NA} = {available_list_size(), not_available_list_size()}.
 
 available_list_size() ->
@@ -148,13 +153,17 @@ available_list_size() ->
     
 available_list() ->
     Query = [{{'$1','$2', '$3'}, [{'=:=','$2',?AVAILABLE}], [['$1']]}],
-    ets:select(?TABLE, Query).
+    List = ets:select(?TABLE, Query),
+    io:format('available_list = ~p~n', [List]),
+    List.
 
 not_available_list_size() ->
     length(not_available_list()).
 not_available_list() ->
     Query = [{{'$1','$2', '$3'}, [{'=:=','$2',?NOT_AVAILABLE}], [['$1']]}],
-    ets:select(?TABLE, Query).
+    List = ets:select(?TABLE, Query),
+    io:format('not_available_list = ~p~n', [List]),
+    List.
 
 check_no_user_left(Config) ->
 	[{id, _},
