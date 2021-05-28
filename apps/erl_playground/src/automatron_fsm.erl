@@ -3,8 +3,7 @@
 -behaviour(gen_statem).
 
 -include("tables.hrl").
-
--define(NAME, automatron).
+-include("statem.hrl").
 
 -export([start_link/1, delete_automatron_pid/1]).
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
@@ -107,6 +106,8 @@ list_options(cast, check_presence_other_users, Data = #data{}) ->
 list_options(cast, _Msg, Data = #data{}) ->
         lager:info("automatron received a cast message."),
         {next_state, list_options, Data};
+list_options({call, From}, {test_query, state_name}, Data = #data{}) ->
+    {keep_state, Data, {reply, From, ?STATE_WELCOME_LIST}};
 list_options({call, From}, Msg, Data = #data{}) ->
     lager:info("automatron could not recognize the call with message ~p", [Msg]),
     {keep_state, Data, {reply, From, <<"bad_msg">>}};
@@ -138,6 +139,8 @@ idle(cast, check_presence_other_users, Data = #data{timeout = Timeout, server_pi
 idle(cast, Event, Data = #data{}) ->
     unexpected(Event, idle),
     {keep_state, Data};
+idle({call, From}, {test_query, state_name}, Data = #data{}) ->
+    {keep_state, Data, {reply, From, ?STATE_IDLE}};
 idle({call, From}, _Msg, Data = #data{}) ->
     {keep_state, Data, {reply, From, waiting_for_chat_msg()}};
 idle(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
@@ -171,6 +174,8 @@ idle_wait(info, {'DOWN', Monitor,_,_,_}, Data = #data{monitor=Monitor}) ->
 idle_wait(cast, Event, Data = #data{}) ->
     unexpected(Event, idle_wait),
     {keep_state, Data};
+idle_wait({call, From}, {test_query, state_name}, Data = #data{}) ->
+    {keep_state, Data, {reply, From, ?STATE_IDLE_WAIT}};
 idle_wait({call, _From}, Event, Data = #data{}) ->
     unexpected(Event, idle_wait),
     {keep_state, Data};
@@ -198,6 +203,8 @@ chat(cast, {tell_other_user, Msg}, Data=#data{server_pid = ServerPid, other_user
     NewMsg = prepend_username(OtherUsername, Msg),
     tell_user(ServerPid, NewMsg),
     {keep_state, Data};
+chat({call, From}, {test_query, state_name}, Data = #data{}) ->
+    {keep_state, Data, {reply, From, ?STATE_CHAT}};
 chat({call, From}, {user_request, Msg = <<"bye">>}, Data = #data{other_user_pid=OtherPid, server_pid = ServerPid}) ->
     notice("Sending message \"~p\"~n", [Msg]),
     gen_statem:cast(OtherPid, {tell_other_user, Msg}),
@@ -226,10 +233,9 @@ chat(Event, Msg, Data = #data{}) ->
 
 
         
-operator({call, From},
-         {user_request, _Msg},
-         Data = #data{msg_current = MsgCounter, msg_max = Max})
-    when MsgCounter == 0 ->
+operator({call, From}, {test_query, state_name}, Data = #data{}) ->
+    {keep_state, Data, {reply, From, ?STATE_OPERATOR}};
+operator({call, From}, {user_request, _Msg}, Data = #data{msg_current = MsgCounter, msg_max = Max}) when MsgCounter == 0 ->
     {next_state, list_options, Data#data{msg_current = Max}, {reply, From, operator_timeout_msg(Data#data.username)}};
 operator({call, From}, {user_request, Msg}, Data = #data{server_pid = ServerPid, msg_current = MsgCounter}) when is_binary(Msg) ->
     Str = erlang:binary_to_list(Msg),

@@ -2,16 +2,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("tables.hrl").
-
--define(WL_JOKE, 		1).
--define(WL_ID, 			2).
--define(WL_OPERATOR, 	3).
--define(WL_CHAT, 	    4).
-
--define(STATE_CHAT, 		    chat).
--define(STATE_DISCONNECTED, 	disconnected).
--define(STATE_IDLE, 		    idle).
--define(STATE_OPERATOR, 		operator).
+-include_lib("statem.hrl").
 
 %% Note: This directive should only be used in test suites.
 -compile(export_all).
@@ -187,5 +178,5 @@ check_unordered(MyList, ListToCompare) ->
     true = sets:from_list(MyList) =:= sets:from_list(ListToCompare).
 
 
-get_state(_Pid) ->
-    todo.
+get_state(Pid) ->
+    gen_statem:cast(Pid, {test_query, state_name}).

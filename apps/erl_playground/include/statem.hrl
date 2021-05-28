@@ -1,0 +1,11 @@
+-define(WL_JOKE, 		1).
+-define(WL_ID, 			2).
+-define(WL_OPERATOR, 	3).
+-define(WL_CHAT, 	    4).
+
+-define(STATE_CHAT, 		    chat).
+-define(STATE_DISCONNECTED, 	disconnected).
+-define(STATE_IDLE, 		    idle).
+-define(STATE_IDLE_WAIT,	    idle_wait).
+-define(STATE_OPERATOR, 		operator).
+-define(STATE_WELCOME_LIST, 	list_options).
