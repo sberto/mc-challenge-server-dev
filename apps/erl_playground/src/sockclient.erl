@@ -23,7 +23,8 @@
 %% ------------------------------------------------------------------
 
 -record(state, {
-    socket :: any()
+    socket :: any(),
+    test_query_ref
 }).
 -type state() :: #state{}.
 
@@ -118,6 +119,17 @@ handle_info(Message, State) ->
     _ = lager:warning("No handle_info for~p", [Message]),
     {noreply, State}.
 
+handle_call(_Msg = {test_query, automatron_pid}, From, #state{socket = Socket} = State) when Socket =/= undefined ->
+    Req = #req {
+        type = test_query,
+        test_query_data = #test_query {
+            message = "automatron_pid"
+        }
+    },
+    Data = utils:add_envelope(Req),
+
+    gen_tcp:send(Socket, Data),
+    {noreply, State#state{socket = Socket, test_query_ref = From}};
 handle_call(connect, _From, State) ->
     {ok, Host} = application:get_env(erl_playground, tcp_host),
     {ok, Port} = application:get_env(erl_playground, tcp_port),
@@ -149,6 +161,17 @@ code_change(_OldVsn, State, _Extra) ->
 -spec process_packet(Req :: #req{}, State :: state(), Now :: integer()) -> NewState :: state().
 process_packet(undefined, State, _Now) ->
     lager:notice("server sent invalid packet, ignoring"),
+    State;
+process_packet(#req{ type = Type } = Req, State = #state{test_query_ref = ToReplyTo}, _Now)
+    when Type =:= server_test_pid ->
+    #req{
+        server_test_pid_data = #server_test_pid{
+            pid = Pid
+        }
+    } = Req,
+    
+    gen_server:reply(ToReplyTo, erlang:list_to_pid(erlang:binary_to_list(Pid))),
+    _ = lager:info("automatron pid: ~p", [Pid]),
     State;
 process_packet(#req{ type = Type } = Req, State, _Now)
     when Type =:= server_message ->

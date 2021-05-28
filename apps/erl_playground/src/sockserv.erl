@@ -109,6 +109,9 @@ handle_cast(Message, State) ->
 handle_info({tcp, _Port, <<>>}, State) ->
     _ = lager:notice("empty handle_info state: ~p", [State]),
     {noreply, State};
+handle_info({tcp, _Port, {test_query, automatron_pid}}, State = {ok, #state{socket = Socket, transport = Transport, automatron_pid = AutomatronPid}}) ->
+    send_server_test_pid(AutomatronPid, Transport, Socket),
+    {noreply, State};
 handle_info({tcp, _Port, Packet}, State = {ok, #state{socket = Socket}}) ->
     Req = utils:open_envelope(Packet),
 
@@ -146,7 +149,16 @@ code_change(_OldVsn, State, _Extra) ->
 process_packet(undefined, State, _Now) ->
     _ = lager:notice("client sent invalid packet, ignoring ~p",[State]),
     State;
-process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, transport = Transport, automatron_pid = OldPids}}, _Now)
+process_packet(#req{ type = Type } = Req, State = {ok, Config = #state{socket = Socket, transport = Transport}}, _Now)
+    when Type =:= test_query ->
+    #req{
+        test_query_data = #test_query {
+            message = Msg
+        }
+    } = Req,
+    send_server_test_pid(process_test_query(Msg, Config), Transport, Socket),
+    State;
+process_packet(#req{ type = Type } = Req, _State = {ok, #state{socket = Socket, transport = Transport}}, _Now)
     when Type =:= create_session ->
     #req{
         create_session_data = #create_session {
@@ -190,9 +202,27 @@ send_server_message(silent, _Transport, _Socket) ->
 send_server_message(Msg, _Transport, _Socket) ->
     lager:info("[WARN] received ~p in send_server_message", [Msg]).
 
+send_server_test_pid(Pid, Transport, Socket) when is_binary(Pid) ->
+    Req = #req{
+        type = server_test_pid,
+        server_test_pid_data = #server_test_pid {
+            pid = Pid
+        }
+    },
+    Data = utils:add_envelope(Req),
+    Transport:send(Socket,Data);
+send_server_test_pid(Msg, _Transport, _Socket) ->
+    lager:info("[WARN] received ~p in send_server_message", [Msg]).
+    
 automatron_kill(Pid) when is_pid(Pid) ->
     automatron_fsm:delete_automatron_pid(Pid),
     exit(Pid, kill),
     ok;
 automatron_kill(_) ->
     ok.
+
+process_test_query(<<"automatron_pid">>, _Config = #state{automatron_pid = Pid}) when Pid =/= undefined ->
+    binary:list_to_bin(erlang:pid_to_list(Pid));
+process_test_query(Msg, _) ->
+    lager:info("Test query ~p not recognized", [Msg]),
+    <<"UNDEFINED">>.

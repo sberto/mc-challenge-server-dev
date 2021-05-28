@@ -8,7 +8,8 @@
 -compile(export_all).
 
 all() ->    [{group, group_multiple_access_one_username},
-             {group, group_welcome_list_selection_and_availability}].
+             {group, group_welcome_list_selection_and_availability},
+             {group, group_3_users_operator_connection}].
 
 %%%%%%%%%%%%
 %% GROUPS %%
@@ -19,9 +20,9 @@ groups() ->
         {group_multiple_access_one_username, [], [{group, subgroup_multiple_access_one_username}, check_no_user_left]},
         {subgroup_multiple_access_one_username, [parallel], [client_1_access, client_1_access, client_1_access]},
       
-        {group_welcome_list_selection_and_availability, [sequence], [client_wl_joke, client_wl_id, client_wl_operator, client_wl_chat]}
+        {group_welcome_list_selection_and_availability, [sequence], [client_wl_joke, client_wl_id, client_wl_operator, client_wl_chat]},
 
-        % {group_3_users_operator_connection,	[parallel],						[client_3_operator_connection]},
+        {group_3_users_operator_connection,	     [{repeat, 10}],						[client_3_operator_connection]}
         % {group_2_users_chat,					[parallel, {repeat, 10}],		[client_2_chat]},
         % {group_2_users_chat_disconnection,	[parallel, {repeat, 10}],		[client_2_chat_disconnection]},
         % {group_3_users_chat,					[parallel, {repeat, 10}],		[client_3_chat]}
@@ -177,6 +178,10 @@ check_no_user_left(Config) ->
 check_unordered(MyList, ListToCompare) ->
     true = sets:from_list(MyList) =:= sets:from_list(ListToCompare).
 
+automatron_pid(MyPid) ->
+    gen_server:call(MyPid, {test_query, automatron_pid}).
 
 get_state(Pid) ->
-    gen_statem:cast(Pid, {test_query, state_name}).
+    AutomatronPid = automatron_pid(Pid),
+    gen_statem:call(AutomatronPid, {test_query, state_name}).
+    
