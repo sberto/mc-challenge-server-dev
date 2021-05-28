@@ -121,10 +121,7 @@ handle_info(Message, State) ->
 
 handle_call(_Msg = {test_query, automatron_pid}, From, #state{socket = Socket} = State) when Socket =/= undefined ->
     Req = #req {
-        type = test_query,
-        test_query_data = #test_query {
-            message = "automatron_pid"
-        }
+        type = test_pid
     },
     Data = utils:add_envelope(Req),
 
@@ -163,9 +160,9 @@ process_packet(undefined, State, _Now) ->
     lager:notice("server sent invalid packet, ignoring"),
     State;
 process_packet(#req{ type = Type } = Req, State = #state{test_query_ref = ToReplyTo}, _Now)
-    when Type =:= server_test_pid ->
+    when Type =:= test_pid ->
     #req{
-        server_test_pid_data = #server_test_pid{
+        test_pid_data = #test_pid{
             pid = Pid
         }
     } = Req,

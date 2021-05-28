@@ -12,11 +12,7 @@ message user_request {
     required string message = 1;
 }
 
-message test_query {
-    required string message = 1;
-}
-
-message server_test_pid {
+message test_pid {
     required string pid = 1;
 }
 
@@ -25,15 +21,13 @@ message req {
         create_session = 1;
         server_message = 2;
         user_request = 3;
-        test_query = 4;
-        server_test_pid = 5;
+        test_pid = 4;
     }
     required type_enum type = 1;
     optional create_session create_session_data = 2;
     optional server_message server_message_data = 3;
     optional user_request   user_request_data   = 4;
-    optional test_query     test_query_data     = 5;
-    optional server_test_pid server_test_pid_data = 6;
+    optional test_pid       test_pid_data = 5;
 }
 
 message envelope {

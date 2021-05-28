@@ -28,16 +28,9 @@
         }).
 -endif.
 
--ifndef('TEST_QUERY_PB_H').
--define('TEST_QUERY_PB_H', true).
--record(test_query,
-        {message                :: iodata()         % = 1
-        }).
--endif.
-
--ifndef('SERVER_TEST_PID_PB_H').
--define('SERVER_TEST_PID_PB_H', true).
--record(server_test_pid,
+-ifndef('TEST_PID_PB_H').
+-define('TEST_PID_PB_H', true).
+-record(test_pid,
         {pid                    :: iodata()         % = 1
         }).
 -endif.
@@ -45,12 +38,11 @@
 -ifndef('REQ_PB_H').
 -define('REQ_PB_H', true).
 -record(req,
-        {type                   :: create_session | server_message | user_request | test_query | server_test_pid | integer(), % = 1, enum req.type_enum
+        {type                   :: create_session | server_message | user_request | test_pid | integer(), % = 1, enum req.type_enum
          create_session_data    :: erl_playground_pb:create_session() | undefined, % = 2
          server_message_data    :: erl_playground_pb:server_message() | undefined, % = 3
          user_request_data      :: erl_playground_pb:user_request() | undefined, % = 4
-         test_query_data        :: erl_playground_pb:test_query() | undefined, % = 5
-         server_test_pid_data   :: erl_playground_pb:server_test_pid() | undefined % = 6
+         test_pid_data          :: erl_playground_pb:test_pid() | undefined % = 5
         }).
 -endif.
 
