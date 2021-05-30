@@ -2,6 +2,7 @@
 -behaviour(gen_server).
 
 -include("erl_playground_pb.hrl").
+-include("statem.hrl").
 
 %% ------------------------------------------------------------------
 %% API Function Exports
@@ -127,6 +128,8 @@ handle_call(_Msg = {test_query, automatron_pid}, From, #state{socket = Socket} =
 
     gen_tcp:send(Socket, Data),
     {noreply, State#state{socket = Socket, test_query_ref = From}};
+handle_call(_Msg = {test_query, automatron_pid}, From, #state{socket = Socket} = State) when Socket =:= undefined ->
+    {reply, ?STATE_DISCONNECTED, State};
 handle_call(connect, _From, State) ->
     {ok, Host} = application:get_env(erl_playground, tcp_host),
     {ok, Port} = application:get_env(erl_playground, tcp_port),
@@ -140,8 +143,12 @@ handle_call(disconnect, _From, #state{socket = Socket} = State)
     gen_tcp:shutdown(Socket, read_write),
 
     {reply, normal, State};
+handle_call(disconnect, _From, #state{socket = Socket} = State)
+    when Socket =:= undefined ->
+
+    {reply, ?STATE_DISCONNECTED, State};
 handle_call(Message, _From, State) ->
-    _ = lager:warning("No handle_call for ~p", [Message]),
+    _ = lager:warning("No handle_call for ~p with state ~p", [Message, State]),
     {reply, normal, State}.
 
 terminate(Reason, _State) ->

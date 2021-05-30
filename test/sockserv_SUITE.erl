@@ -4,12 +4,19 @@
 -include_lib("tables.hrl").
 -include_lib("statem.hrl").
 
+-define(REPEAT, 10).
+
 %% Note: This directive should only be used in test suites.
 -compile(export_all).
 
-all() ->    [{group, group_multiple_access_one_username},
+all() ->    [
+             {group, group_multiple_access_one_username},
              {group, group_welcome_list_selection_and_availability},
-             {group, group_3_users_operator_connection}].
+             {group, group_3_users_operator_connection},
+             {group, group_2_users_chat},
+             {group, group_2_users_chat_disconnection}
+             
+            ].
 
 %%%%%%%%%%%%
 %% GROUPS %%
@@ -22,10 +29,10 @@ groups() ->
       
         {group_welcome_list_selection_and_availability, [sequence], [client_wl_joke, client_wl_id, client_wl_operator, client_wl_chat]},
 
-        {group_3_users_operator_connection,	     [{repeat, 10}],						[client_3_operator_connection]}
-        % {group_2_users_chat,					[parallel, {repeat, 10}],		[client_2_chat]},
-        % {group_2_users_chat_disconnection,	[parallel, {repeat, 10}],		[client_2_chat_disconnection]},
-        % {group_3_users_chat,					[parallel, {repeat, 10}],		[client_3_chat]}
+        {group_3_users_operator_connection,	     [{repeat, ?REPEAT}],						[client_3_operator_connection]},
+        {group_2_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_2_chat]},
+        {group_2_users_chat_disconnection,	[parallel, {repeat, ?REPEAT}],		[client_2_chat_disconnection]}
+        % {group_3_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_3_chat]}
     ].
 
 init_per_group(_, Config) -> Config.
@@ -78,16 +85,22 @@ client_3_operator_connection(Config) ->
 	[?STATE_OPERATOR, ?STATE_OPERATOR, ?STATE_OPERATOR] = [ get_state(Pid) || Pid <- Pids ].
 	
 client_2_chat(Config) ->
-	Pids = [?config(my_pid, Config), create_client(), create_client()],
+	Pids = [?config(my_pid, Config), create_client()],
 	[ send_user_request(Pid, ?WL_CHAT) || Pid <- Pids ],
     [?STATE_CHAT, ?STATE_CHAT] = [ get_state(Pid) || Pid <- Pids ].
 
 client_2_chat_disconnection(Config) ->
-	Pids = [?config(my_pid, Config), create_client(), create_client()],
+	Pids = [?config(my_pid, Config), create_client()],
 	[ send_user_request(Pid, ?WL_CHAT) || Pid <- Pids ],
+    timer:sleep(1),
+    StateListBefore = [ get_state(Pid) || Pid <- Pids ],
+    check_unordered([?STATE_CHAT, ?STATE_CHAT], StateListBefore),
+    sockclient:disconnect(hd(Pids)),
     StateList = [ get_state(Pid) || Pid <- Pids ],
-    check_unordered([?STATE_CHAT, ?STATE_DISCONNECTED], StateList).
-
+    timer:sleep(1),
+    [?STATE_DISCONNECTED, OtherState] = StateList,
+    true = lists:member(OtherState, [?STATE_IDLE, ?STATE_IDLE_WAIT, ?STATE_WELCOME_LIST]).
+    
 client_3_chat(Config) ->
 	Pids = [?config(my_pid, Config), create_client(), create_client()],
 	[ send_user_request(Pid, ?WL_CHAT) || Pid <- Pids ],
@@ -182,6 +195,12 @@ automatron_pid(MyPid) ->
     gen_server:call(MyPid, {test_query, automatron_pid}).
 
 get_state(Pid) ->
+    timer:sleep(1),
     AutomatronPid = automatron_pid(Pid),
-    gen_statem:call(AutomatronPid, {test_query, state_name}).
+    case AutomatronPid =:= ?STATE_DISCONNECTED of 
+        true ->
+            ?STATE_DISCONNECTED;
+        false ->
+            gen_statem:call(AutomatronPid, {test_query, state_name})
+    end.
     
