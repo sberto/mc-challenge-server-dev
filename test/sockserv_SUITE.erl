@@ -14,8 +14,8 @@ all() ->    [
              {group, group_welcome_list_selection_and_availability},
              {group, group_3_users_operator_connection},
              {group, group_2_users_chat},
-             {group, group_2_users_chat_disconnection}
-             
+             {group, group_2_users_chat_disconnection},
+             {group, group_3_users_chat}
             ].
 
 %%%%%%%%%%%%
@@ -31,8 +31,8 @@ groups() ->
 
         {group_3_users_operator_connection,	     [{repeat, ?REPEAT}],						[client_3_operator_connection]},
         {group_2_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_2_chat]},
-        {group_2_users_chat_disconnection,	[parallel, {repeat, ?REPEAT}],		[client_2_chat_disconnection]}
-        % {group_3_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_3_chat]}
+        {group_2_users_chat_disconnection,	[parallel, {repeat, ?REPEAT}],		[client_2_chat_disconnection]},
+        {group_3_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_3_chat]}
     ].
 
 init_per_group(_, Config) -> Config.
@@ -94,7 +94,7 @@ client_2_chat_disconnection(Config) ->
 	[ send_user_request(Pid, ?WL_CHAT) || Pid <- Pids ],
     timer:sleep(1),
     StateListBefore = [ get_state(Pid) || Pid <- Pids ],
-    check_unordered([?STATE_CHAT, ?STATE_CHAT], StateListBefore),
+    [?STATE_CHAT, ?STATE_CHAT] = StateListBefore,
     sockclient:disconnect(hd(Pids)),
     StateList = [ get_state(Pid) || Pid <- Pids ],
     timer:sleep(1),
@@ -105,6 +105,7 @@ client_3_chat(Config) ->
 	Pids = [?config(my_pid, Config), create_client(), create_client()],
 	[ send_user_request(Pid, ?WL_CHAT) || Pid <- Pids ],
 	StateList = [ get_state(Pid) || Pid <- Pids ],
+    timer:sleep(1),
     check_unordered([?STATE_CHAT, ?STATE_CHAT, ?STATE_IDLE], StateList).
 
 %%%%%%%%%%%%%%%%
