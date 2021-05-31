@@ -9,6 +9,9 @@
 -export([init/1, callback_mode/0, terminate/3, code_change/4]).
 -export([list_options/3, operator/3, idle/3, idle_wait/3, chat/3]). %% states
 
+-define(CALL_TIMEOUT, 100).
+-define(DISCONNECT_OPERATOR(Reply), {next_state, list_options, Data#data{msg_current = Data#data.msg_max, operator_pid = undefined}, []++Reply}).
+
 -record(data,
         {server_pid,
          username,
@@ -18,7 +21,8 @@
          msg_current :: integer(),
          other_user_pid :: pid(),
          monitor :: reference(),
-         other_username}).
+         other_username,
+         operator_pid = undefined :: pid()}).
 
 %%%%%%%%%%%%%%%%
 %% Server API %%
@@ -89,10 +93,12 @@ list_options({call, From}, {user_request, <<"1">>}, Data = #data{}) ->
 list_options({call, From}, {user_request, <<"2">>}, Data = #data{}) ->
     {keep_state, Data, {reply, From, atom_to_binary(Data#data.unique)}};
 list_options({call, From}, {user_request, <<"3">>}, Data = #data{timeout = Timeout}) ->
-    {next_state,
-     operator,
-     Data,
-     [{state_timeout, Timeout * 1000, []}, {reply, From, operator_msg()}]};
+    case operator_sup:connect(?CALL_TIMEOUT) of
+        timeout -> 
+            {keep_state, Data, [{reply, From, operator_unavailable_msg()}]};
+        Pid -> 
+            {next_state, operator, Data#data{operator_pid = Pid}, [{state_timeout, Timeout * 1000, []}, {reply, From, operator_msg()}]}
+    end;
 list_options({call, From}, {user_request, <<"4">>}, Data = #data{timeout = Timeout}) ->
     notice_change(idle),
     set_available(Data#data.username),
@@ -235,25 +241,28 @@ chat(Event, Msg, Data = #data{}) ->
         
 operator({call, From}, {test_query, state_name}, Data = #data{}) ->
     {keep_state, Data, {reply, From, ?STATE_OPERATOR}};
-operator({call, From}, {user_request, _Msg}, Data = #data{msg_current = MsgCounter, msg_max = Max}) when MsgCounter == 0 ->
-    {next_state, list_options, Data#data{msg_current = Max}, {reply, From, operator_timeout_msg(Data#data.username)}};
-operator({call, From}, {user_request, Msg}, Data = #data{server_pid = ServerPid, msg_current = MsgCounter}) when is_binary(Msg) ->
-    Str = erlang:binary_to_list(Msg),
-    Answer =
-        case string:to_integer(Str) of
-            {error, no_integer} ->
-                list_to_binary(pid_to_list(ServerPid));
-            {N, _Rest} ->
-                if N rem 2 =:= 0 ->
-                       <<"even">>;
-                   true ->
-                       <<"odd">>
-                end
+operator({call, From}, Event = {user_request, _Msg}, Data = #data{msg_current = MsgCounter, msg_max = Max, operator_pid = Operator}) when MsgCounter == 0 andalso Operator =/= undefined ->
+    send_disconnect_operator(Operator, Event),
+    ?DISCONNECT_OPERATOR([{reply, From, operator_timeout_msg(Data#data.username)}]);
+operator({call, From}, Event = {user_request, Msg}, Data = #data{server_pid = ServerPid, msg_current = MsgCounter, operator_pid = Operator}) when is_binary(Msg) andalso Operator =/= undefined  ->
+    String = erlang:binary_to_list(Msg),
+    Req = 
+        case string:to_integer(String) of
+            {error, no_integer} -> String;
+            {N, _Rest} -> N
         end,
-    {keep_state, Data#data{msg_current = MsgCounter - 1}, {reply, From, Answer}};
-operator(state_timeout, [], Data = #data{server_pid = ServerPid}) ->
+    case operator_sup:ask(Req, [Operator, ?CALL_TIMEOUT]) of
+        timeout -> 
+            unexpected(Event, operator),
+            send_disconnect_operator(Operator, Event),
+            ?DISCONNECT_OPERATOR([{reply, From, operator_timeout_msg(Data#data.username)}]);
+        Answer ->
+            {keep_state, Data#data{msg_current = MsgCounter - 1}, {reply, From, Answer}}
+    end;
+operator(state_timeout, [], Data = #data{server_pid = ServerPid, operator_pid = Operator}) when Operator =/= undefined ->
+    send_disconnect_operator(Operator, []),
     tell_user(ServerPid, operator_timeout_msg(Data#data.username)),
-    {next_state, list_options, Data};
+    ?DISCONNECT_OPERATOR([]);
 operator(_, Event, Data = #data{}) ->
     unexpected(Event, operator),
     {keep_state, Data}.
@@ -294,6 +303,9 @@ welcome_msg() ->
 operator_msg() ->
     <<"I am the operator, how can I help you?">>.
 
+operator_unavailable_msg() ->
+    <<"There are no operators available at the moment. Please try again later.">>.
+    
 operator_timeout_msg(User) when is_list(User) ->
     Msg = "Your time with the operator has finished. Goodbye, "
           ++ User
@@ -360,3 +372,12 @@ check_presence_other_users() ->
 prepend_username(OtherUsername, Msg) ->
     NewMsg = OtherUsername++" says: "++binary:bin_to_list(Msg),
     binary:list_to_bin(NewMsg).
+
+send_disconnect_operator(Pid, Event) ->
+    case operator_sup:disconnect([Pid, ?CALL_TIMEOUT]) of
+        timeout -> 
+            unexpected(Event, operator);
+        Ans -> 
+            notice(" Disconnection successful: ~p", [Ans]),
+            Ans
+    end.

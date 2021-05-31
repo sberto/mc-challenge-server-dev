@@ -28,9 +28,13 @@ ask(Request, [Pid, Timeout]) ->
     end.
     
 disconnect([Pid, Timeout]) ->
-    case catch poolboy:checkin(operator_pool, Pid, Timeout) of 
-        {'EXIT', {timeout, _}} -> timeout;
-        Ans -> Ans
+    case catch gen_server:call(Pid, disconnect, Timeout) of 
+                {'EXIT', {timeout, _}} -> timeout;
+                _ -> 
+                    case catch poolboy:checkin(operator_pool, Pid) of 
+                        {'EXIT', {timeout, _}} -> timeout;
+                        Ans -> Ans
+                    end
     end.
     
 %%%%%%%%%%%%%%%

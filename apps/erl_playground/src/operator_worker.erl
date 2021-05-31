@@ -16,17 +16,19 @@
 
 handle_call(connect, _From = {Pid, _Ref}, State = #state{client = undefined}) ->
     {reply, ok, State#state{client = Pid}};
+handle_call(disconnect, _From = {Pid, _Ref}, State = #state{client = Pid}) ->
+    {reply, ok, State#state{client = undefined}};
 handle_call({answer, N}, _From = {Pid, _Ref}, State=#state{client=Pid}) when is_number(N) ->
     Ans = case N rem 2 of
             0 -> "even";
             1 -> "odd"
     end,
-    {reply, Ans, State};
+    {reply, binary:list_to_bin(Ans), State};
 handle_call({answer, _Question}, _From = {Pid, _Ref}, State=#state{client=Pid}) ->
     Ans = "My pid is "++pid_to_list(self()),
-    {reply, Ans, State};
-handle_call(B,C,State) ->
-    io:format("~p:~p:~p~n", [B,C,State]),
+    {reply, binary:list_to_bin(Ans), State};
+handle_call(Msg,From,State) ->
+    _ = lager:info("[~p] Operator received ~p from ~p~n", [self(),Msg,From]),
     {noreply, State}.
     
 %%%%%%%%%%%%%%%
