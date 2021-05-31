@@ -13,6 +13,7 @@ all() ->    [
              {group, group_multiple_access_one_username},
              {group, group_welcome_list_selection_and_availability},
              {group, group_3_users_operator_connection},
+             {group, group_4_users_operator_connection},
              {group, group_2_users_chat},
              {group, group_2_users_chat_disconnection},
              {group, group_3_users_chat}
@@ -30,6 +31,7 @@ groups() ->
         {group_welcome_list_selection_and_availability, [sequence], [client_wl_joke, client_wl_id, client_wl_operator, client_wl_chat]},
 
         {group_3_users_operator_connection,	     [sequence, {repeat, ?REPEAT}],						[client_3_operator_connection]},
+        {group_4_users_operator_connection,	     [sequence, {repeat, ?REPEAT}],						[client_4_operator_connection]},
         {group_2_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_2_chat]},
         {group_2_users_chat_disconnection,	[parallel, {repeat, ?REPEAT}],		[client_2_chat_disconnection]},
         {group_3_users_chat,					[sequence, {repeat, ?REPEAT}],		[client_3_chat]}
@@ -86,7 +88,14 @@ client_3_operator_connection(Config) ->
 	Pids = [?config(my_pid, Config), create_client(), create_client()],
 	[ send_user_request(Pid, ?WL_OPERATOR) || Pid <- Pids ],
 	[?STATE_OPERATOR, ?STATE_OPERATOR, ?STATE_OPERATOR] = [ get_state(Pid) || Pid <- Pids ].
-	
+
+client_4_operator_connection(Config) ->
+    timer:sleep(1),
+    Pids = [?config(my_pid, Config), create_client(), create_client(), create_client()],
+    [ send_user_request(Pid, ?WL_OPERATOR) || Pid <- Pids ],
+    StateList = [ get_state(Pid) || Pid <- Pids ],
+    check_unordered([?STATE_OPERATOR, ?STATE_OPERATOR, ?STATE_OPERATOR, ?STATE_WELCOME_LIST], StateList).
+        
 client_2_chat(Config) ->
 	Pids = [?config(my_pid, Config), create_client()],
 	[ send_user_request(Pid, ?WL_CHAT) || Pid <- Pids ],
@@ -194,6 +203,7 @@ check_no_user_left(Config) ->
     Size =:= 0.
 
 check_unordered(MyList, ListToCompare) ->
+    io:format('check_unordered: ~p =:= ~p', [MyList, ListToCompare]),
     true = sets:from_list(MyList) =:= sets:from_list(ListToCompare).
 
 automatron_pid(MyPid) ->
