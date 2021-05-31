@@ -29,15 +29,16 @@ groups() ->
       
         {group_welcome_list_selection_and_availability, [sequence], [client_wl_joke, client_wl_id, client_wl_operator, client_wl_chat]},
 
-        {group_3_users_operator_connection,	     [{repeat, ?REPEAT}],						[client_3_operator_connection]},
+        {group_3_users_operator_connection,	     [sequence, {repeat, ?REPEAT}],						[client_3_operator_connection]},
         {group_2_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_2_chat]},
         {group_2_users_chat_disconnection,	[parallel, {repeat, ?REPEAT}],		[client_2_chat_disconnection]},
-        {group_3_users_chat,					[parallel, {repeat, ?REPEAT}],		[client_3_chat]}
+        {group_3_users_chat,					[sequence, {repeat, ?REPEAT}],		[client_3_chat]}
     ].
 
 init_per_group(_, Config) -> Config.
 
-end_per_group(_, _Config) -> ok.
+end_per_group(_, _Config) -> 
+    ok.
 
 %%%%%%%%%%%%%%%
 %% TESTCASES %%
@@ -64,6 +65,7 @@ end_per_testcase(check_no_user_left, Config) ->
     Config;
 end_per_testcase(_, Config) ->
     ok = sockclient:disconnect(?config(my_pid, Config)),
+    exit(whereis(operator_pool), kill),
     Config.
 
 %% tests
@@ -80,6 +82,7 @@ client_wl_chat(Config) ->
     check_client_chat(Config).
 
 client_3_operator_connection(Config) ->
+    timer:sleep(1),
 	Pids = [?config(my_pid, Config), create_client(), create_client()],
 	[ send_user_request(Pid, ?WL_OPERATOR) || Pid <- Pids ],
 	[?STATE_OPERATOR, ?STATE_OPERATOR, ?STATE_OPERATOR] = [ get_state(Pid) || Pid <- Pids ].
@@ -104,6 +107,7 @@ client_2_chat_disconnection(Config) ->
 client_3_chat(Config) ->
 	Pids = [?config(my_pid, Config), create_client(), create_client()],
 	[ send_user_request(Pid, ?WL_CHAT) || Pid <- Pids ],
+    timer:sleep(1),
 	StateList = [ get_state(Pid) || Pid <- Pids ],
     timer:sleep(1),
     check_unordered([?STATE_CHAT, ?STATE_CHAT, ?STATE_IDLE], StateList).

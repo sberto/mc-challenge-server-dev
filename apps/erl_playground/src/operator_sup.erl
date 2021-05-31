@@ -42,8 +42,9 @@ disconnect([Pid, Timeout]) ->
 %%%%%%%%%%%%%%%
 
 start_link() ->
-    _ = lager:info("operator pool started"),
-    supervisor:start_link({local, operator_sup}, ?MODULE, []).
+    Pid = supervisor:start_link({global, operator_sup}, ?MODULE, []),
+    lager:info("[~p] operator pool started", [Pid]),
+    Pid.
 
 init([]) ->
     {ok, Pools} = application:get_env(erl_playground, pools),
