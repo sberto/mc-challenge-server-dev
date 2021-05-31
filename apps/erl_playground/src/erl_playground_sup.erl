@@ -34,7 +34,8 @@ init([]) ->
 
     {ok, { {one_for_all, MaxR, MaxT}, [
     	?CHILD(ranch_sup, supervisor),
-        ?CHILD(node_boot, worker, transient)
+        ?CHILD(node_boot, worker, transient),
+    	?CHILD(operator_sup, supervisor)
     ]} }.
 
 %%====================================================================
