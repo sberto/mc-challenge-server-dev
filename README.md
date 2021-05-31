@@ -28,8 +28,20 @@ Google Protocol Buffer is automatically compiled starting from the included prot
 This is a playgrounf application that allows you to focus on the logic of your system, rather than the boring technical stuff. It includes a basic Erlang/OTP application structure with a TCP client and a TCP server.
 
 # Candidate comments
+These features has been implemented:
+* Automatic responder
+* Jokes of the day
+* My called id
+* Ask the operator
+And also:
+* Limited operators
+* Chat
+* Client
+* Tests
+
 ## Messages
-A new proto message has been implemented (`user_request`), to send input to the `automatron_fsm`.
+A new proto message has been implemented (`user_request`) to send input to the `automatron_fsm`.
+Another message has been implemented (`test_pid`) to ask for the pid to the `automatron_fsm` during the tests.
 ## Client
 ### Integrated client
 You can connect to the server performing:
